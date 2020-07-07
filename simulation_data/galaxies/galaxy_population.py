@@ -65,7 +65,7 @@ class GalaxyPopulation():
         
     def get_timeaverage_stellar_formation_rate(self, timescale): #can parameterize for max mass if needed
         import pathlib
-        file = pathlib.Path('z='+str(self.redshiftz)+'_TimeAvg_SFR_'+str(timescale)+'Gyr')
+        file = pathlib.Path('z='+str(self.redshift)+'_TimeAvg_SFR_'+str(timescale)+'Gyr')
         if file.exists ():
             time_avg_SFT = np.loadtxt('z='+str(self.redshift)+ '_TimeAvg_SFR_'+ str(timescale) +'Gyr', dtype=float) #rename pre-existing files before parameterizing further
             return time_avg_SFT
