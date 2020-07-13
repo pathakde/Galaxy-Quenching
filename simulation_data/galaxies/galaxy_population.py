@@ -1,6 +1,13 @@
 import numpy as np
-from .galaxy import mean_stellar_formation_time, timeaverage_stellar_formation_rate, median_stellar_formation_time
+from astropy.cosmology import FlatLambdaCDM
+import astropy.units as u
+
+#imported requests
+import requests
+#import get()
 from simulation_data import get
+
+from .galaxy import mean_stellar_formation_time, timeaverage_stellar_formation_rate, median_stellar_formation_time
 
 class GalaxyPopulation():
     
@@ -9,7 +16,7 @@ class GalaxyPopulation():
         self.mass_min = 0
         self.mass_max = 0
         self.redshift = 0
-
+        
     #select ids
     def select_galaxies(self, redshift, mass_min, mass_max=12):
         if self.ids == [] or (self.mass_min != mass_min or self.mass_max != mass_max or self.redshift != redshift):

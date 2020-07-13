@@ -11,9 +11,11 @@ import io
 from astropy.cosmology import FlatLambdaCDM
 import astropy.units as u
 from astropy.constants import G, h, k_B
-
 h = 0.6774
 cosmo = FlatLambdaCDM(H0= (h * 100) * u.km / u.s / u.Mpc, Tcmb0=2.725 * u.K, Om0=0.3)
+
+import scipy
+from scipy import stats
 
 #input params: redshift==numerical-val; id==int(must exist in range, pre-check); plot=="True" or "False"
 #output: (plot=False): (SFH, BE): SFH=StellarFormationHistory, BE=BinEdges
@@ -90,7 +92,7 @@ def timeaverage_stellar_formation_rate(z, subhalo_id, timescale):
     return TimeAvg_SFR
 
 #input params: z=redshift (num val); subhalo_id==int(must exist in range, pre-check)
-#dependent on SFH_get(plot=False) output
+#dependent on: SFH_get(plot=False) output
 #output: MedianStellarAge = a Bin Edge in units of Gyr
 
 def median_stellar_formation_time(z, subhalo_id):
@@ -100,3 +102,44 @@ def median_stellar_formation_time(z, subhalo_id):
     cumsum_median = np.cumsum(total) < tot_sum #filter_arr
     newarr = np.cumsum(total)[cumsum_median]
     return BE[len(newarr)-1] #units: Gyr in Lookback time
+
+#input params: z=redshift (num val); subhalo_id==int(must exist in range, pre-check); n_bins==int(num of bins for percentile-count stellar particle partition)
+#dependent on: get()
+#output: statistic = median ages of binned stellar particles (units: Gyr), radial_percentiles[1:]/R_e = percentile bin-edges for normalized radial distance of stellar particle from subhalo center (unitless), R_e = effective (median) radius of stellar particles in subhalo in physical kpc
+
+def age_profile(z, subhalo_id, n_bins=20):
+    import h5py
+    params = {'stars':'Coordinates,GFM_StellarFormationTime'}
+
+    url = "http://www.tng-project.org/api/TNG100-1/snapshots/z=" + str(z) + "/subhalos/" + str(subhalo_id)
+    sub = get(url) # get json response of subhalo properties
+    saved_filename = get(url + "/cutout.hdf5",params) # get and save HDF5 cutout file
+
+    with h5py.File(saved_filename, mode='r') as f: #store as h5py file
+        dx = f['PartType4']['Coordinates'][:,0] - sub['pos_x']
+        dy = f['PartType4']['Coordinates'][:,1] - sub['pos_y']
+        dz = f['PartType4']['Coordinates'][:,2] - sub['pos_z']
+        starFormationTime = f['PartType4']['GFM_StellarFormationTime'][:]
+    #sub['pos_x'], sub['pos_y'], sub['pos_z'] already accounted for 
+    dx = dx[starFormationTime>0]
+    dy = dy[starFormationTime>0]
+    dz = dz[starFormationTime>0]
+    starFormationTime = starFormationTime[starFormationTime>0]
+
+    scale_factor = a = 1.0 / (1+z)
+    distance = (dx**2 + dy**2 + dz**2)**(1/2)
+    R = distance*a/h #units: physical kpc
+    #this takes the most time to run: approx 20s for 1 id
+    z_starFormationTime = 1/starFormationTime -1
+    Gyr_starFormationTime = cosmo.age(z_starFormationTime).value
+    Gyr_redshift = cosmo.age(2.0).value
+    LookbackTime = Gyr_redshift - Gyr_starFormationTime #units: Gyr
+    
+    radial_percentiles = np.zeros(n_bins + 1)#N+1 for N percentiles 
+    for i in range(1, (n_bins+1)):
+        radial_percentiles[i] = np.percentile(R, (100/n_bins)*i) 
+    R_e = np.nanmedian(R)
+    
+    statistic, bin_edges, bin_number = scipy.stats.binned_statistic(R, LookbackTime, 'median', bins=radial_percentiles)
+
+    return statistic, radial_percentiles[1:]/R_e, R_e
