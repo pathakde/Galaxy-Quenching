@@ -11,11 +11,13 @@ from .galaxy import mean_stellar_formation_time, timeaverage_stellar_formation_r
 
 class GalaxyPopulation():
     
+    
     def __init__(self):
         self.ids = []
         self.mass_min = 0
         self.mass_max = 0
         self.redshift = 0
+        
         
     #select ids
     def select_galaxies(self, redshift, mass_min, mass_max=12):

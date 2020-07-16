@@ -1,6 +1,5 @@
 import requests
 
-#preliminary definitions
 #defined get()
 
 def get(path, params=None):
