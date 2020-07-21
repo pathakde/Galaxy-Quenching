@@ -7,7 +7,7 @@ import requests
 #import get()
 from simulation_data import get
 
-from .galaxy import mean_stellar_formation_time, timeaverage_stellar_formation_rate, median_stellar_formation_time
+from .galaxy import mean_stellar_age, timeaverage_stellar_formation_rate, median_stellar_age, mean_stellar_metallicity, age_profile
 
 class GalaxyPopulation():
     
@@ -37,27 +37,26 @@ class GalaxyPopulation():
     
     
     #mean SFT
-    def calc_mean_stellar_formation_time(self ):
+    def calc_mean_stellar_age(self ):
         #create and populate array for mean SFT
         ids = self.ids
         means = np.zeros(len(ids))
         for i, id in enumerate(ids): 
-            means[i] = mean_stellar_formation_time(z = self.redshift, subhalo_id = id)
+            means[i] = mean_stellar_age(redshift = self.redshift, id = id)
         #save file
         np.savetxt('z='+str(self.redshift)+'_Mean_SFT', means)
         mean_SFT = np.loadtxt('z='+str(self.redshift)+'_Mean_SFT', dtype=float)
         return mean_SFT
     
     
-    def get_mean_stellar_formation_time(self): #can parameterize for max mass if needed
+    def get_mean_stellar_age(self): #can parameterize for max mass if needed
         import pathlib
         file = pathlib.Path('z='+str(self.redshift)+'_Mean_SFT')
         if file.exists ():
             MeanSFT = np.loadtxt('z='+str(self.redshift)+'_Mean_SFT', dtype=float) #rename pre-existing files before parameterizing further
             return MeanSFT
         else:
-            self.calc_mean_stellar_formation_time()
-           
+            return self.calc_mean_stellar_age()
     
     #time avg SFR
     def calc_timeaverage_stellar_formation_rate(self, calc_timescale):
@@ -65,7 +64,7 @@ class GalaxyPopulation():
         ids = self.ids
         time_averages = np.zeros(len(ids))
         for i, id in enumerate(ids): 
-            time_averages[i] = timeaverage_stellar_formation_rate(z = self.redshift, subhalo_id = id, timescale = calc_timescale)
+            time_averages[i] = timeaverage_stellar_formation_rate(redshift = self.redshift, id = id, timescale = calc_timescale)
         #save file
         np.savetxt( 'z='+str(self.redshift)+ '_TimeAvg_SFR_'+ str(calc_timescale) +'Gyr', time_averages)
         time_avg_SFT = np.loadtxt('z='+ str(self.redshift) +'_TimeAvg_SFR_'+ str(calc_timescale)+ 'Gyr', dtype=float)
@@ -79,7 +78,7 @@ class GalaxyPopulation():
             time_avg_SFT = np.loadtxt('z='+str(self.redshift)+ '_TimeAvg_SFR_'+ str(timescale) +'Gyr', dtype=float) #rename pre-existing files before parameterizing further
             return time_avg_SFT
         else:
-            self.calc_timeaverage_stellar_formation_rate(calc_timescale=timescale)
+            return self.calc_timeaverage_stellar_formation_rate(calc_timescale=timescale)
     
     
     #current SFR
@@ -88,7 +87,7 @@ class GalaxyPopulation():
         ids = self.ids
         current_SFRs = np.zeros(len(ids))
         for i, id in enumerate(ids): 
-            current_SFRs[i] = timeaverage_stellar_formation_rate(z = self.redshift, subhalo_id = id, timescale = 0)
+            current_SFRs[i] = timeaverage_stellar_formation_rate(redshift = self.redshift, id = id, timescale = 0)
         #save file
         np.savetxt( 'z='+ str(self.redshift) +'_Current_SFR', current_SFRs)
         current_SFR = np.loadtxt('z='+ str(self.redshift) +'_Current_SFR', dtype=float)
@@ -102,28 +101,51 @@ class GalaxyPopulation():
             current_SFR = np.loadtxt('z='+ str(self.redshift) +'_Current_SFR', dtype=float) #rename pre-existing files before parameterizing further
             return current_SFR
         else:
-            self.calc_current_stellar_formation_rate()
+            return self.calc_current_stellar_formation_rate()
     
     
     #median SFT
-    def calc_median_stellar_formation_time(self):
+    def calc_median_stellar_age(self):
         #create and populate array for mean SFT
         ids = self.ids
         MedianSFT = np.zeros(len(ids))
         for i, id in enumerate(ids):
-            MedianSFT[i] = median_stellar_formation_time(z = self.redshift, subhalo_id = id)
+            MedianSFT[i] = median_stellar_age(redshift = self.redshift, id = id)
         #save file
         np.savetxt('z='+ str(self.redshift) +'_Mean_SFT', MedianSFT)
         median_SFT = np.loadtxt('z='+ str(self.redshift) +'_Mean_SFT', dtype=float)
         return median_SFT
     
     
-    def get_median_stellar_formation_time(self):
+    def get_median_stellar_age(self):
         import pathlib
         file = pathlib.Path('z='+ str(self.redshift) +'_Mean_SFT')
         if file.exists ():
             median_SFT = np.loadtxt('z='+ str(self.redshift) +'_Mean_SFT', dtype=float) #rename pre-existing files before parameterizing further
             return median_SFT
         else:
-            self.calc_median_stellar_formation_time()
+            return self.calc_median_stellar_age()
+    
+    
+    #median SFT
+    def calc_effective_radius(self):
+        #create and populate array for mean SFT
+        ids = self.ids
+        r_effective = np.zeros(len(ids))
+        for i, id in enumerate(ids):
+            r_effective[i] = age_profile(id=id, redshift=self.redshift, n_bins=20)[2]
+        #save file
+        np.savetxt('z='+ str(self.redshift) +'_effective_radius', r_effective)
+        r_effective = np.loadtxt('z='+ str(self.redshift) +'_effective_radius', dtype=float)
+        return r_effective
+    
+    
+    def get_effective_radius(self):
+        import pathlib
+        file = pathlib.Path('z='+ str(self.redshift) +'_effective_radius')
+        if file.exists ():
+            r_effective = np.loadtxt('z='+ str(self.redshift) +'_effective_radius', dtype=float) #rename pre-existing files before parameterizing further
+            return r_effective
+        else:
+            return self.calc_effective_radius()
     

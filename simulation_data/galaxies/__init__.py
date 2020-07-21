@@ -1,1 +1,2 @@
 from .galaxy_population import GalaxyPopulation
+from .galaxy import mean_stellar_age, timeaverage_stellar_formation_rate, median_stellar_age, mean_stellar_metallicity

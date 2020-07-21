@@ -19,27 +19,30 @@ from scipy import stats
 
 
 
-#input params: subhalo_id==int(must exist in range, pre-check); z==redshift (num val); populate_dict=boolean, default value ==False
-#preconditions: depends on get(), a function, imported from simulation_data
-#output: if populate_dict == False: saves file 'cutout_'+str(subhalo_id)+'.hdf5'
-#output: if populate_dict == True: saves file 'cutout_'+str(subhalo_id)+'.hdf5'; returns dictionary with data (6 keys)
-#output dictionary keys: 'relative_x_coordinates' : #units: physical kpc
-                        #'relative_y_coordinates' : #units: physical kpc
-                        #'relative_z_coordinates' : #units: physical kpc
-                        #'LookbackTime' : #units: Gyr
-                        #'stellar_initial_masses' : #units: solar mass
-                        #'stellar_metallicities' : #units: solar metallicity
-def get_galaxy_particle_data(subhalo_id, z, populate_dict=False):
+def get_galaxy_particle_data(id, redshift, populate_dict=False):
+    """
+    input params: id==int(must exist in range, pre-check); z==redshift (num val); populate_dict=boolean, default value ==False
+    preconditions: depends on get(), a function, imported from simulation_data
+    output: if populate_dict == False: saves file 'cutout_'+str(id)+'_data.hdf5'
+    output: if populate_dict == True: saves file 'cutout_'+str(id)+'_data.hdf5'; returns dictionary with data (6 keys)
+    output dictionary keys: 'relative_x_coordinates' : #units: physical kpc
+                            'relative_y_coordinates' : #units: physical kpc
+                            'relative_z_coordinates' : #units: physical kpc
+                            'LookbackTime' : #units: Gyr
+                            'stellar_initial_masses' : #units: solar mass
+                            'stellar_metallicities' : #units: solar metallicity    
+    """
     stellar_data = {}
     import h5py
     params = {'stars':'Coordinates,GFM_StellarFormationTime,GFM_InitialMass,GFM_Metallicity'}
     #looping through fields makes the code longer for the data manipulation section
     from pathlib import Path
+    new_saved_filename = 'cutout_'+str(id)+'_data.hdf5'
 
-    if Path('cutout_'+str(subhalo_id)+'.hdf5').is_file():
+    if Path('cutout_'+str(id)+'_data.hdf5').is_file():
         pass
     else:
-        url = "http://www.tng-project.org/api/TNG100-1/snapshots/z=" + str(z) + "/subhalos/" + str(subhalo_id)
+        url = "http://www.tng-project.org/api/TNG100-1/snapshots/z=" + str(redshift) + "/subhalos/" + str(id)
         sub = get(url) # get json response of subhalo properties
         saved_filename = get(url + "/cutout.hdf5",params) # get and save HDF5 cutout file
         with h5py.File(saved_filename, mode='r') as f: #read from h5py file
@@ -58,7 +61,7 @@ def get_galaxy_particle_data(subhalo_id, z, populate_dict=False):
         starMetallicity = starMetallicity[starFormationTime>0]
         starFormationTime = starFormationTime[starFormationTime>0]
 
-        scale_factor = a = 1.0 / (1 + z)
+        scale_factor = a = 1.0 / (1 + redshift)
         #unit conversions
         dx = dx*a/h #units: physical kpc
         dy = dy*a/h #units: physical kpc
@@ -66,40 +69,40 @@ def get_galaxy_particle_data(subhalo_id, z, populate_dict=False):
         starFormationTime = 1/starFormationTime - 1 #units:scale factor
         starFormationTime = cosmo.age(starFormationTime).value #units:Gyr
         starInitialMass = starInitialMass*1e10/h #units:solar mass
-        Gyr_redshift = cosmo.age(z).value #units:Gyr
+        Gyr_redshift = cosmo.age(redshift).value #units:Gyr
         LookbackTime = Gyr_redshift - starFormationTime #units:Gyr
-        starMetallicity = starMetallicity / 0.0127 #units:primordial sollar metallicity
+        starMetallicity = starMetallicity / 0.0127 #units: solar metallicity
 
         #delete pre-existing file since this is faster than replacing each field
         import os
-        os.remove(saved_filename)
+        os.remove('cutout_'+str(id)+'.hdf5')
         #create new file with same filename
-        h5f = h5py.File(saved_filename, 'w')
-        #writing data
-        h5f.create_dataset('relative_x_coordinates', data = dx)
-        h5f.create_dataset('relative_y_coordinates', data = dy)
-        h5f.create_dataset('relative_z_coordinates', data = dz)
-        h5f.create_dataset('LookbackTime', data = LookbackTime)
-        h5f.create_dataset('stellar_initial_masses', data = starInitialMass)
-        h5f.create_dataset('stellar_metallicities', data = starMetallicity)
+        new_saved_filename = 'cutout_'+str(id)+'_data.hdf5'
+        with h5py.File(new_saved_filename, 'w') as h5f:
+            #writing data
+            d1 = h5f.create_dataset('relative_x_coordinates', data = dx)
+            d2 = h5f.create_dataset('relative_y_coordinates', data = dy)
+            d3 = h5f.create_dataset('relative_z_coordinates', data = dz)
+            d4 = h5f.create_dataset('LookbackTime', data = LookbackTime)
+            d5 = h5f.create_dataset('stellar_initial_masses', data = starInitialMass)
+            d6 = h5f.create_dataset('stellar_metallicities', data = starMetallicity)
         #close file
-        h5f.close()
-
-    saved_filename = 'cutout_'+str(subhalo_id)+'.hdf5'
-    h5f_open = h5py.File(saved_filename, 'r')
-    dx = h5f_open['relative_x_coordinates'][:]
-    dy = h5f_open['relative_y_coordinates'][:]
-    dz = h5f_open['relative_z_coordinates'][:]
-    LookbackTime = h5f_open['LookbackTime'][:]
-    starInitialMass = h5f_open['stellar_initial_masses'][:]
-    starMetallicity = h5f_open['stellar_metallicities'][:]
+        #h5f.close()
+    
+    with h5py.File(new_saved_filename, 'r+') as h5f_open:
+        dx = h5f_open['relative_x_coordinates'][:]
+        dy = h5f_open['relative_y_coordinates'][:]
+        dz = h5f_open['relative_z_coordinates'][:]
+        LookbackTime = h5f_open['LookbackTime'][:]
+        starInitialMass = h5f_open['stellar_initial_masses'][:]
+        starMetallicity = h5f_open['stellar_metallicities'][:]
     stellar_data = {
                     'relative_x_coordinates' : dx, #units: physical kpc
                     'relative_y_coordinates' : dy, #units: physical kpc
                     'relative_z_coordinates' : dz, #units: physical kpc
                     'LookbackTime' : LookbackTime, #units:Gyr
                     'stellar_initial_masses' : starInitialMass, #units:solar mass
-                    'stellar_metallicities' : starMetallicity #units:primordial stellar metallicity
+                    'stellar_metallicities' : starMetallicity #units:solar metallicity
                    }
     if populate_dict==False:
         return
@@ -107,12 +110,15 @@ def get_galaxy_particle_data(subhalo_id, z, populate_dict=False):
         return stellar_data
 
     
-#input params: id==int(must exist in range, pre-check); redshift==numerical-val; plot=="True" or "False"
-#preconditions: depends on get_galaxy_particle_data(subhalo_id=id , z=redshift, populate_dict=True) output
-#output: (plot=False): (SFH, BE): SFH=StellarFormationHistory, units: $M_\odot$/yr;  BE=BinEdges, units: Gyr
-#output: (plot=True): plt.hist (SFH, BE)
-def get_stellar_formation_history(id, redshift, plot=False, binwidth=0.05): 
-    stellar_data = get_galaxy_particle_data(subhalo_id=id , z=redshift, populate_dict=True)
+
+def get_star_formation_history(id, redshift, plot=False, binwidth=0.05): 
+    """
+    input params: id==int(must exist in range, pre-check); redshift==numerical-val; plot=="True" or "False"
+    preconditions: depends on get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True) output
+    output: (plot=False): (SFH, BE): SFH=StellarFormationHistory, units: $M_\odot$/yr;  BE=BinEdges, units: Gyr
+    output: (plot=True): plt.hist (SFH, BE)
+    """
+    stellar_data = get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True)
     HistWeights = stellar_data['stellar_initial_masses']/(binwidth*1e9)
     LookbackTime = stellar_data['LookbackTime']
     if plot==False:
@@ -131,21 +137,27 @@ def get_stellar_formation_history(id, redshift, plot=False, binwidth=0.05):
         return plt.show()
 
     
-#input params: subhalo_id==int(must exist in range, pre-check); z==redshift (num val)
-#preconditions: depends on get_galaxy_particle_data(subhalo_id=subhalo_id , z=z, populate_dict=True) output
-#output: mean stellar age, units: Gyr
-def mean_stellar_formation_time(subhalo_id, z):
-    stellar_data = get_galaxy_particle_data(subhalo_id=subhalo_id , z=z, populate_dict=True)
+
+def mean_stellar_age(id, redshift):
+    """
+    input params: id==int(must exist in range, pre-check); redshift==redshift (num val)
+    preconditions: depends on get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True) output
+    output: mean stellar age, units: Gyr
+    """
+    stellar_data = get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True)
     LookbackTime = stellar_data['LookbackTime']    
     return np.mean(LookbackTime)
-#opt return: print("Mean Stellar Age for subhalo with id=" +str(subhalo_id)+ " at redshift " + str(z) + " is " + str(MeanStellarAge) + " Gyr")
+#opt return: print("Mean Stellar Age for subhalo with id=" +str(id)+ " at redshift " + str(redshift) + " is " + str(MeanStellarAge) + " Gyr")
 
 
-#input params: z=redshift(num val); subhalo_id==int(must exist in range, pre-check); timescale=num val in range(LT) in units of Gyr
-#preconditions: depends on get_stellar_formation_history(redshift = z, id = subhalo_id, plot=False) output; first array SFH
-#output: average stellar formation rate over a specified timescale, units: $M_\odot$
-def timeaverage_stellar_formation_rate(subhalo_id, z, timescale):
-    SFH, BE = get_stellar_formation_history(redshift = z, id = subhalo_id, plot=False)
+
+def timeaverage_stellar_formation_rate(id, redshift, timescale):
+    """
+    input params: redshift=redshift(num val); id==int(must exist in range, pre-check); timescale=num val in range(LT) in units of Gyr
+    preconditions: depends on get_stellar_formation_history(redshift = redshift, id = id, plot=False) output; first array SFH
+    output: average stellar formation rate over a specified timescale, units: $M_\odot$
+    """
+    SFH, BE = get_star_formation_history(redshift = redshift, id = id, plot=False)
     if timescale<BE[0]:
         TimeAvg_SFR = SFH[0]
     else:
@@ -155,31 +167,40 @@ def timeaverage_stellar_formation_rate(subhalo_id, z, timescale):
     return TimeAvg_SFR
 
 
-#input params: subhalo_id==int(must exist in range, pre-check); z=redshift (num val)
-#preconditions: depends on get_galaxy_particle_data(subhalo_id=subhalo_id , z=z, populate_dict=True) output
-#output: median stellar age, units: Gyr
-def median_stellar_formation_time(subhalo_id, z):
-    stellar_data = get_galaxy_particle_data(subhalo_id=subhalo_id , z=z, populate_dict=True)
+
+def median_stellar_age(id, redshift):
+    """
+    input params: id==int(must exist in range, pre-check); redshift=redshift (num val)
+    preconditions: depends on get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True) output
+    output: median stellar age, units: Gyr
+    """
+    stellar_data = get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True)
     LookbackTime = stellar_data['LookbackTime']
     return np.median(LookbackTime) #units: Gyr in Lookback time
 
 
-#input params: subhalo_id==int(must exist in range, pre-check); z=redshift (num val)
-#preconditions: depends on get_galaxy_particle_data(subhalo_id=subhalo_id , z=z, populate_dict=True) output
-#output: mean stellar metallicity, units: solar metallicity
-def mean_stellar_metallicity(subhalo_id, z):
-    stellar_data = get_galaxy_particle_data(subhalo_id=subhalo_id , z=z, populate_dict=True)
+
+def mean_stellar_metallicity(id, redshift):
+    """
+    input params: id==int(must exist in range, pre-check); redshift=redshift (num val)
+    preconditions: depends on get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True) output
+    output: mean stellar metallicity, units: solar metallicity
+    """
+    stellar_data = get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True)
     stellar_metallicities = stellar_data['stellar_metallicities']    
     return np.mean(stellar_metallicities)
 
 
-#input params: id==int(must exist in range, pre-check); z=redshift (num val); n_bins==int(num of bins for percentile-count stellar particle partition, default value = 20)
-#preconditions: depends on get_galaxy_particle_data(subhalo_id=id , z=redshift, populate_dict=True) output
-#output: #statistic = median ages of binned stellar particles (units: Gyr); 
-         #percentile cutoffs for radial distances =  radial_percentiles[1:]/R_e = percentile bin-edges for normalized radial distance of stellar particle from subhalo center (unitless); 
-         #R_e = effective (median) radius of stellar particles in subhalo (units: physical kpc)
+
 def age_profile(id, redshift, n_bins=20):
-    stellar_data = get_galaxy_particle_data(subhalo_id=id , z=redshift, populate_dict=True)
+    """
+    input params: id==int(must exist in range, pre-check); redshift=redshift (num val); n_bins==int(num of bins for percentile-count stellar particle partition, default value = 20)
+    preconditions: depends on get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True) output
+    output: statistic = median ages of binned stellar particles (units: Gyr); 
+            percentile cutoffs for radial distances =  radial_percentiles[1:]/R_e = percentile bin-edges for normalized radial distance of stellar particle from subhalo center (unitless); 
+            R_e = effective (median) radius of stellar particles in subhalo (units: physical kpc)
+    """
+    stellar_data = get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True)
     LookbackTime = stellar_data['LookbackTime']
     dx = stellar_data['relative_x_coordinates']
     dy = stellar_data['relative_y_coordinates']
