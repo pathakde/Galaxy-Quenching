@@ -79,7 +79,7 @@ class GalaxyPopulation():
             return time_avg_SFT
         else:
             return self.calc_timeaverage_stellar_formation_rate(calc_timescale=timescale)
-    
+            
     
     #current SFR
     def calc_current_stellar_formation_rate(self):
@@ -87,7 +87,7 @@ class GalaxyPopulation():
         ids = self.ids
         current_SFRs = np.zeros(len(ids))
         for i, id in enumerate(ids): 
-            current_SFRs[i] = timeaverage_stellar_formation_rate(redshift = self.redshift, id = id, timescale = 0)
+            current_SFRs[i] = timeaverage_stellar_formation_rate(redshift = self.redshift, id = id, timescale = 0.01)
         #save file
         np.savetxt( 'z='+ str(self.redshift) +'_Current_SFR', current_SFRs)
         current_SFR = np.loadtxt('z='+ str(self.redshift) +'_Current_SFR', dtype=float)
@@ -102,6 +102,29 @@ class GalaxyPopulation():
             return current_SFR
         else:
             return self.calc_current_stellar_formation_rate()
+        
+        
+    #SFR ratio
+    def calc_stellar_formation_rate_ratio(self, calc_timescale):
+        #create and populate array for mean SFT
+        ids = self.ids
+        ratios = np.zeros(len(ids))
+        for i, id in enumerate(ids): 
+            ratios[i] = timeaverage_stellar_formation_rate(redshift = self.redshift, id = id, timescale = 0.01) / timeaverage_stellar_formation_rate(redshift = self.redshift, id = id, timescale = calc_timescale)
+        #save file
+        np.savetxt( 'z='+str(self.redshift)+ '_SFR_Ratio_'+ str(calc_timescale) +'Gyr', ratios)
+        ratios = np.loadtxt('z='+ str(self.redshift) +'_SFR_Ratio_'+ str(calc_timescale)+ 'Gyr', dtype=float)
+        return ratios
+    
+        
+    def get_stellar_formation_rate_ratio(self, timescale): #can parameterize for max mass if needed
+        import pathlib
+        file = pathlib.Path('z='+str(self.redshift)+'_SFR_Ratio_'+str(timescale)+'Gyr')
+        if file.exists ():
+            ratios = np.loadtxt('z='+str(self.redshift)+ '_SFR_Ratio_' + str(timescale) +'Gyr', dtype=float) #rename pre-existing files before parameterizing further
+            return ratios
+        else:
+            return self.calc_stellar_formation_rate_ratio(calc_timescale=timescale)
     
     
     #median SFT
@@ -148,4 +171,27 @@ class GalaxyPopulation():
             return r_effective
         else:
             return self.calc_effective_radius()
+    
+    
+    #mean stellar metallicity
+    def calc_mean_stellar_metallicity(self):
+        #create and populate array for mean SFT
+        ids = self.ids
+        mean_metallicity = np.zeros(len(ids))
+        for i, id in enumerate(ids):
+            mean_metallicity[i] = mean_stellar_metallicity(id=id, redshift=self.redshift)
+        #save file
+        np.savetxt('z='+ str(self.redshift) +'_mean_metallicity', mean_metallicity)
+        mean_metallicity = np.loadtxt('z='+ str(self.redshift) +'_mean_metallicity', dtype=float)
+        return mean_metallicity
+    
+    
+    def get_mean_stellar_metallicity(self):
+        import pathlib
+        file = pathlib.Path('z='+ str(self.redshift) +'_mean_metallicity')
+        if file.exists ():
+            mean_metallicity = np.loadtxt('z='+ str(self.redshift) +'_mean_metallicity', dtype=float) #rename pre-existing files before parameterizing further
+            return mean_metallicity
+        else:
+            return self.calc_mean_stellar_metallicity()
     
