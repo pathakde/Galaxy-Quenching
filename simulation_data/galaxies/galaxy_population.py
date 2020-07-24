@@ -7,7 +7,7 @@ import requests
 #import get()
 from simulation_data import get
 
-from .galaxy import mean_stellar_age, timeaverage_stellar_formation_rate, median_stellar_age, mean_stellar_metallicity, age_profile
+from .galaxy import mean_stellar_age, timeaverage_stellar_formation_rate, median_stellar_age, mean_stellar_metallicity, age_profile, mean_stellar_mass, total_stellar_mass
 
 class GalaxyPopulation():
     
@@ -33,6 +33,7 @@ class GalaxyPopulation():
             self.mass_max = mass_max
             self.redshift = redshift
             self.ids = [ subhalos['results'][i]['id'] for i in range(subhalos['count'])]
+            self.ids = np.array(self.ids, dtype=np.int32)
         return self.ids
     
     
@@ -175,7 +176,7 @@ class GalaxyPopulation():
     
     #mean stellar metallicity
     def calc_mean_stellar_metallicity(self):
-        #create and populate array for mean SFT
+        #create and populate array for mean metallicity
         ids = self.ids
         mean_metallicity = np.zeros(len(ids))
         for i, id in enumerate(ids):
@@ -195,3 +196,50 @@ class GalaxyPopulation():
         else:
             return self.calc_mean_stellar_metallicity()
     
+    
+        #mean stellar mass
+    def calc_mean_stellar_mass(self):
+        #create and populate array for mean mass
+        ids = self.ids
+        mean_mass = np.zeros(len(ids))
+        for i, id in enumerate(ids):
+            mean_mass[i] = mean_stellar_mass(id=id, redshift=self.redshift)
+        #save file
+        np.savetxt('z='+ str(self.redshift) +'_mean_mass', mean_mass)
+        mean_mass = np.loadtxt('z='+ str(self.redshift) +'_mean_mass', dtype=float)
+        return mean_mass
+    
+    
+    def get_mean_stellar_mass(self):
+        import pathlib
+        file = pathlib.Path('z='+ str(self.redshift) +'_mean_mass')
+        if file.exists ():
+            mean_mass = np.loadtxt('z='+ str(self.redshift) +'_mean_mass', dtype=float) #rename pre-existing files before parameterizing further
+            return mean_mass
+        else:
+            return self.calc_mean_stellar_mass()
+        
+        
+        #total stellar mass
+    def calc_total_stellar_mass(self):
+        #create and populate array for mean mass
+        ids = self.ids
+        total_mass = np.zeros(len(ids))
+        for i, id in enumerate(ids):
+            total_mass[i] = total_stellar_mass(id=id, redshift=self.redshift)
+        #save file
+        np.savetxt('z='+ str(self.redshift) +'_total_mass', total_mass)
+        total_mass = np.loadtxt('z='+ str(self.redshift) +'_total_mass', dtype=float)
+        return total_mass
+    
+    
+    def get_total_stellar_mass(self):
+        import pathlib
+        file = pathlib.Path('z='+ str(self.redshift) +'_total_mass')
+        if file.exists ():
+            total_mass = np.loadtxt('z='+ str(self.redshift) +'_total_mass', dtype=float) #rename pre-existing files before parameterizing further
+            return total_mass
+        else:
+            return self.calc_total_stellar_mass()
+        
+        

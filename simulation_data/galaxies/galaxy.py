@@ -192,6 +192,30 @@ def mean_stellar_metallicity(id, redshift):
 
 
 
+def mean_stellar_mass(id, redshift):
+    """
+    input params: id==int(must exist in range, pre-check); redshift=redshift (num val)
+    preconditions: depends on get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True) output
+    output: mean stellar mass, units: solar masses
+    """
+    stellar_data = get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True)
+    stellar_mass = stellar_data['stellar_initial_masses']    
+    return np.mean(stellar_mass)
+
+
+
+def total_stellar_mass(id, redshift):
+    """
+    input params: id==int(must exist in range, pre-check); redshift=redshift (num val)
+    preconditions: depends on get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True) output
+    output: mean stellar mass, units: log10 solar masses
+    """
+    stellar_data = get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True)
+    stellar_mass = stellar_data['stellar_initial_masses']    
+    return np.log10(sum(stellar_mass))
+
+
+
 def age_profile(id, redshift, n_bins=20):
     """
     input params: id==int(must exist in range, pre-check); redshift=redshift (num val); n_bins==int(num of bins for percentile-count stellar particle partition, default value = 20)
@@ -213,4 +237,4 @@ def age_profile(id, redshift, n_bins=20):
     R_e = np.nanmedian(R)
     statistic, bin_edges, bin_number = scipy.stats.binned_statistic(R, LookbackTime, 'median', bins=radial_percentiles)
 
-    return statistic, radial_percentiles[1:]/R_e, R_e
+    return statistic, radial_percentiles[:-1]/R_e, R_e
