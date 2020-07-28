@@ -121,11 +121,11 @@ def get_star_formation_history(id, redshift, plot=False, binwidth=0.05):
     stellar_data = get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True)
     HistWeights = stellar_data['stellar_initial_masses']/(binwidth*1e9)
     LookbackTime = stellar_data['LookbackTime']
+    SFH, BE = np.histogram(LookbackTime, bins=np.arange(0, max(LookbackTime), binwidth), weights=HistWeights)
+    bincenters = [(BE[i]+BE[i+1])/2. for i in range(len(BE)-1)]
     if plot==False:
-        return np.histogram(LookbackTime, bins=np.arange(min(LookbackTime) - binwidth, max(LookbackTime) + binwidth, binwidth), weights=HistWeights)
-    else:
-        SFH, BE = np.histogram(LookbackTime, bins=np.arange(min(LookbackTime) - binwidth, max(LookbackTime) + binwidth, binwidth), weights=HistWeights)
-        bincenters = [(BE[i]+BE[i+1])/2. for i in range(len(BE)-1)]
+        return bincenters, SFH
+    else:     
         plt.figure(figsize=(10,7))
         plt.step(bincenters, SFH, color = 'b')
         plt.title('Histogram for Lookback Times for id = ' + str(id))
@@ -151,19 +151,16 @@ def mean_stellar_age(id, redshift):
 
 
 
-def timeaverage_stellar_formation_rate(id, redshift, timescale):
+def timeaverage_stellar_formation_rate(id, redshift, timescale, start=0):
     """
-    input params: redshift=redshift(num val); id==int(must exist in range, pre-check); timescale=num val in range(LT) in units of Gyr
-    preconditions: depends on get_stellar_formation_history(redshift = redshift, id = id, plot=False) output; first array SFH
+    input params: redshift=redshift(num val); id==int(must exist in range, pre-check); timescale=num val in range(LT) in units of Gyr; start=num val in range(LT) in units of Gyr, default value == 0
+    preconditions: depends on get_stellar_formation_history(redshift = redshift, id = id, plot=False) output; first array BC=bincenters & second array SFH=star formation histories
     output: average stellar formation rate over a specified timescale, units: $M_\odot$
     """
-    SFH, BE = get_star_formation_history(redshift = redshift, id = id, plot=False)
-    if timescale<BE[0]:
-        TimeAvg_SFR = SFH[0]
-    else:
-        timescale_indices = np.where(BE<=timescale)
-        TimeAvg_SFR = np.sum([SFH[i] for i in timescale_indices]) / len(timescale_indices[0])
-        #NOTE: floored bin value, change to SFH[i+1] for ceiling
+    BC, SFH = get_star_formation_history(redshift = redshift, id = id, plot=False)
+    timescale_indices = np.where((np.array(BC)<=start+timescale+BC[0])&(np.array(BC)>=start)) 
+    TimeAvg_SFR = np.sum([SFH[i] for i in timescale_indices]) / len(timescale_indices[0])
+        #NOTE: ceiling bin value by BC[0] to accommodate edge case of timescale=start (including 0)
     return TimeAvg_SFR
 
 
@@ -207,16 +204,29 @@ def mean_stellar_mass(id, redshift):
 def total_stellar_mass(id, redshift):
     """
     input params: id==int(must exist in range, pre-check); redshift=redshift (num val)
-    preconditions: depends on get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True) output
-    output: mean stellar mass, units: log10 solar masses
+    preconditions: uses get() to access subhalo catalog
+    output: total stellar mass, units: log10 solar masses
     """
-    stellar_data = get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True)
-    stellar_mass = stellar_data['stellar_initial_masses']    
-    return np.log10(sum(stellar_mass))
+    url = "http://www.tng-project.org/api/TNG100-1/snapshots/z=" + str(redshift) + "/subhalos/" + str(id)
+    sub = get(url) # get json response of subhalo properties
+    return np.log10(sub['mass_stars']*1e10/h)
 
 
 
-def age_profile(id, redshift, n_bins=20):
+def halfmass_rad_stars(id, redshift):
+    """
+    input params: id==int(must exist in range, pre-check); redshift=redshift (num val)
+    preconditions: depends on get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True) output
+    output: half-mass radius of all stellar particles, units: physical kpc
+    """
+    scale_factor = a = 1.0 / (1 + redshift)
+    url = "http://www.tng-project.org/api/TNG100-1/snapshots/z=" + str(redshift) + "/subhalos/" + str(id)
+    sub = get(url) # get json response of subhalo properties
+    return sub['halfmassrad_stars']*a/h
+
+
+
+def age_profile(id, redshift, n_bins=20, scatter=False):
     """
     input params: id==int(must exist in range, pre-check); redshift=redshift (num val); n_bins==int(num of bins for percentile-count stellar particle partition, default value = 20)
     preconditions: depends on get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True) output
@@ -236,5 +246,21 @@ def age_profile(id, redshift, n_bins=20):
         radial_percentiles[i] = np.percentile(R, (100/n_bins)*i) 
     R_e = np.nanmedian(R)
     statistic, bin_edges, bin_number = scipy.stats.binned_statistic(R, LookbackTime, 'median', bins=radial_percentiles)
+    
+    if scatter==False:
+        return statistic, radial_percentiles[:-1]/R_e, R_e 
+    else:
+        plt.figure(figsize=(10,7)) # 10 is width, 7 is height
+        plt.plot(R/R_e, LookbackTime, 'bo', ms=2, alpha=0.02)
+        plt.plot(radial_percentiles[1:]/R_e, statistic, c='black')
+        plt.xlim(1e-2, )
+        plt.ylim(1e-1, )
+        plt.title('Normalized Radial Distance vs Stellar Ages in Lookback Times (log/log scale) with Binned Age Trend for id='+str(id))
+        plt.xlabel('Normalized Radial Distance (R/$R_e$)')
+        plt.ylabel('Stellar Ages in Lookback Times(Gyr)')
+        plt.xscale('log')
+        plt.yscale('log')
+        plt.show()
+        return plt.show()
 
-    return statistic, radial_percentiles[:-1]/R_e, R_e
+    
