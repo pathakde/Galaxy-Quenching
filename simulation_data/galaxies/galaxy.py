@@ -239,6 +239,7 @@ def age_profile(id, redshift, n_bins=20, scatter=False):
     dx = stellar_data['relative_x_coordinates']
     dy = stellar_data['relative_y_coordinates']
     dz = stellar_data['relative_z_coordinates']
+    metallicity = stellar_data['stellar_metallicities']
     R = (dx**2 + dy**2 + dz**2)**(1/2)#units: physical kpc
     
     radial_percentiles = np.zeros(n_bins + 1) #N+1 for N percentiles 
@@ -248,14 +249,16 @@ def age_profile(id, redshift, n_bins=20, scatter=False):
     statistic, bin_edges, bin_number = scipy.stats.binned_statistic(R, LookbackTime, 'median', bins=radial_percentiles)
     
     if scatter==False:
-        return statistic, radial_percentiles[:-1]/R_e, R_e 
+        return statistic, radial_percentiles[:-1]/R_e, R_e, R/R_e, LookbackTime, np.log10(metallicity)
     else:
         plt.figure(figsize=(10,7)) # 10 is width, 7 is height
-        plt.plot(R/R_e, LookbackTime, 'bo', ms=2, alpha=0.02)
-        plt.plot(radial_percentiles[1:]/R_e, statistic, c='black')
+        plt.scatter(R/R_e, LookbackTime, c=np.log10(metallicity), s=0.5, alpha=0.7)#c=np.log10(metallicity)
+        plt.plot(np.array(radial_percentiles[1:]/R_e)[4:-4], np.array(statistic)[4:-4], c='black')
         plt.xlim(1e-2, )
         plt.ylim(1e-1, )
-        plt.title('Normalized Radial Distance vs Stellar Ages in Lookback Times (log/log scale) with Binned Age Trend for id='+str(id))
+        plt.grid()
+        plt.colorbar(boundaries=np.linspace(-3.1,1.1,100), label='Metallicities of Stars ($\log_{10}$ $Z_\odot$)')
+        plt.title('Radial Distance vs Stellar Ages (log/log scale) with Binned Age Trend for id='+str(id))
         plt.xlabel('Normalized Radial Distance (R/$R_e$)')
         plt.ylabel('Stellar Ages in Lookback Times(Gyr)')
         plt.xscale('log')
@@ -263,4 +266,44 @@ def age_profile(id, redshift, n_bins=20, scatter=False):
         plt.show()
         return plt.show()
 
+
     
+    
+def metallicity_profile(id, redshift, n_bins=20, scatter=False):
+    """
+    input params: id==int(must exist in range, pre-check); redshift=redshift (num val); n_bins==int(num of bins for percentile-count stellar particle partition, default value = 20)
+    preconditions: depends on get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True) output
+    output: statistic = median metallicities of binned stellar particles (units: log10zsol); 
+            percentile cutoffs for radial distances =  radial_percentiles[1:]/R_e = percentile bin-edges for normalized radial distance of stellar particle from subhalo center (unitless); 
+            R_e = effective (median) radius of stellar particles in subhalo (units: physical kpc)
+    """
+    stellar_data = get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True)
+    LookbackTime = stellar_data['LookbackTime']
+    dx = stellar_data['relative_x_coordinates']
+    dy = stellar_data['relative_y_coordinates']
+    dz = stellar_data['relative_z_coordinates']
+    metallicity = stellar_data['stellar_metallicities']
+    R = (dx**2 + dy**2 + dz**2)**(1/2)#units: physical kpc
+    
+    radial_percentiles = np.zeros(n_bins + 1) #N+1 for N percentiles 
+    for i in range(1, (n_bins+1)):
+        radial_percentiles[i] = np.percentile(R, (100/n_bins)*i) 
+    R_e = np.nanmedian(R)
+    statistic, bin_edges, bin_number = scipy.stats.binned_statistic(R, metallicity, 'median', bins=radial_percentiles)
+    
+    if scatter==False:
+        return statistic, radial_percentiles[:-1]/R_e, R_e 
+    else:
+        plt.figure(figsize=(10,7)) # 10 is width, 7 is height
+        plt.scatter(R/R_e, metallicity, s=2, alpha=0.05)#c=np.log10(LookbackTime)
+        plt.plot(np.array(radial_percentiles[1:]/R_e)[4:-4], np.array(statistic)[4:-4], c='black')
+        plt.xlim(1e-2, )
+        plt.ylim(1e-1, )
+        #plt.colorbar(label='Age of Stars (Gyr)')
+        plt.title('Normalized Radial Distance vs Stellar Metallicities (log/log scale) with Binned Metallicity Trend for id='+str(id))
+        plt.xlabel('Normalized Radial Distance (R/$R_e$)')
+        plt.ylabel('Stellar Metallicity($\log_{10}$ $Z_\odot$)')
+        plt.xscale('log')
+        plt.yscale('log')
+        plt.show()
+        return plt.show()
