@@ -30,22 +30,38 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
                             'relative_z_coordinates' : #units: physical kpc
                             'LookbackTime' : #units: Gyr
                             'stellar_initial_masses' : #units: solar mass
-                            'stellar_metallicities' : #units: solar metallicity    
+                            'stellar_metallicities' : #units: solar metallicity  
+                            'initial_x_coordinates' : #units: physical kpc
+                            'initial_y_coordinates' : #units: physical kpc
+                            'initial_z_coordinates' : #units: physical kpc
+                            'initial_x_velocities' : #units: km/s
+                            'initial_y_velocities' : #units: km/s
+                            'initial_z_velocities' : #units: km/s
     """
     stellar_data = {}
     import h5py
-    params = {'stars':'Coordinates,GFM_StellarFormationTime,GFM_InitialMass,GFM_Metallicity'}
+    params = {'stars':'Coordinates,GFM_StellarFormationTime,GFM_InitialMass,GFM_Metallicity,BirthPos,BirthVel'}
     #looping through fields makes the code longer for the data manipulation section
+    
+    import os
+    import urllib
+    
     from pathlib import Path
-    new_saved_filename = 'cutout_'+str(id)+'_data.hdf5'
+    new_saved_filename = os.path.join('redshift_'+str(redshift)+'_data', 'cutout_'+str(id)+'_redshift_'+str(redshift)+'_data.hdf5')
 
-    if Path('cutout_'+str(id)+'_data.hdf5').is_file():
+    if Path('redshift_'+str(redshift)+'_data\cutout_'+str(id)+'_redshift_'+str(redshift)+'_data.hdf5').is_file():
         pass
     else:
         url = "http://www.tng-project.org/api/TNG100-1/snapshots/z=" + str(redshift) + "/subhalos/" + str(id)
         sub = get(url) # get json response of subhalo properties
         saved_filename = get(url + "/cutout.hdf5",params) # get and save HDF5 cutout file
         with h5py.File(saved_filename, mode='r') as f: #read from h5py file
+            x_init = f['PartType4']['BirthPos'][:,0]
+            y_init = f['PartType4']['BirthPos'][:,1]
+            z_init = f['PartType4']['BirthPos'][:,2]
+            vx_init = f['PartType4']['BirthVel'][:,0]
+            vy_init = f['PartType4']['BirthVel'][:,1]
+            vz_init = f['PartType4']['BirthVel'][:,2]
             dx = f['PartType4']['Coordinates'][:,0] - sub['pos_x']
             dy = f['PartType4']['Coordinates'][:,1] - sub['pos_y']
             dz = f['PartType4']['Coordinates'][:,2] - sub['pos_z']
@@ -54,6 +70,12 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
             starMetallicity = f['PartType4']['GFM_Metallicity'][:]
 
         #selecting star particles only
+        x_init = x_init[starFormationTime>0]
+        y_init = y_init[starFormationTime>0]
+        z_init = z_init[starFormationTime>0]
+        vx_init = vx_init[starFormationTime>0]
+        vy_init = vy_init[starFormationTime>0]
+        vz_init = vz_init[starFormationTime>0]
         dx = dx[starFormationTime>0]
         dy = dy[starFormationTime>0]
         dz = dz[starFormationTime>0]
@@ -62,7 +84,14 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
         starFormationTime = starFormationTime[starFormationTime>0]
 
         scale_factor = a = 1.0 / (1 + redshift)
+        inv_sqrt_a = a**(-1/2)
         #unit conversions
+        x_init = x_init*a/h #units: physical kpc
+        y_init = y_init*a/h #units: physical kpc
+        z_init = z_init*a/h #units: physical kpc
+        vx_init = vx_init*inv_sqrt_a #units: km/s
+        vy_init = vy_init*inv_sqrt_a #units: km/s
+        vz_init = vz_init*inv_sqrt_a #units: km/s
         dx = dx*a/h #units: physical kpc
         dy = dy*a/h #units: physical kpc
         dz = dz*a/h #units: physical kpc   
@@ -77,7 +106,8 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
         import os
         os.remove('cutout_'+str(id)+'.hdf5')
         #create new file with same filename
-        new_saved_filename = 'cutout_'+str(id)+'_data.hdf5'
+        new_saved_filename = os.path.join('redshift_'+str(redshift)+'_data', 'cutout_'+str(id)+'_redshift_'+str(redshift)+'_data.hdf5')
+        #new_saved_filename = 'cutout_'+str(id)+'_redshift_'+str(redshift)+'_data.hdf5'
         with h5py.File(new_saved_filename, 'w') as h5f:
             #writing data
             d1 = h5f.create_dataset('relative_x_coordinates', data = dx)
@@ -86,6 +116,12 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
             d4 = h5f.create_dataset('LookbackTime', data = LookbackTime)
             d5 = h5f.create_dataset('stellar_initial_masses', data = starInitialMass)
             d6 = h5f.create_dataset('stellar_metallicities', data = starMetallicity)
+            d7 = h5f.create_dataset('initial_x_coordinates', data = x_init)
+            d8 = h5f.create_dataset('initial_y_coordinates', data = y_init)
+            d9 = h5f.create_dataset('initial_z_coordinates', data = z_init)
+            d10 = h5f.create_dataset('initial_x_velocities', data = vx_init)
+            d11 = h5f.create_dataset('initial_y_velocities', data = vy_init)
+            d12 = h5f.create_dataset('initial_z_velocities', data = vz_init)
         #close file
         #h5f.close()
     
@@ -96,13 +132,25 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
         LookbackTime = h5f_open['LookbackTime'][:]
         starInitialMass = h5f_open['stellar_initial_masses'][:]
         starMetallicity = h5f_open['stellar_metallicities'][:]
+        x_init = h5f_open['initial_x_coordinates'][:]
+        y_init = h5f_open['initial_y_coordinates'][:]
+        z_init = h5f_open['initial_z_coordinates'][:]
+        vx_init = h5f_open['initial_x_velocities'][:]
+        vy_init = h5f_open['initial_y_velocities'][:]
+        vz_init = h5f_open['initial_z_velocities'][:]
     stellar_data = {
                     'relative_x_coordinates' : dx, #units: physical kpc
                     'relative_y_coordinates' : dy, #units: physical kpc
                     'relative_z_coordinates' : dz, #units: physical kpc
                     'LookbackTime' : LookbackTime, #units:Gyr
                     'stellar_initial_masses' : starInitialMass, #units:solar mass
-                    'stellar_metallicities' : starMetallicity #units:solar metallicity
+                    'stellar_metallicities' : starMetallicity, #units:solar metallicity
+                    'initial_x_coordinates' : x_init, #units: physical kpc
+                    'initial_y_coordinates' : y_init, #units: physical kpc
+                    'initial_z_coordinates' : z_init, #units: physical kpc
+                    'initial_x_velocities' : vx_init, #units: km/s
+                    'initial_y_velocities' : vy_init, #units: km/s
+                    'initial_z_velocities' : vz_init, #units: km/s
                    }
     if populate_dict==False:
         return
