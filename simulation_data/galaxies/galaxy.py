@@ -45,6 +45,9 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
     
     import os
     import urllib
+
+    fullfilename = os.path.join('C:/somedir', 'test.html')
+    #urllib.urlretrieve("http://www.google.com", fullfilename)
     
     from pathlib import Path
     new_saved_filename = os.path.join('redshift_'+str(redshift)+'_data', 'cutout_'+str(id)+'_redshift_'+str(redshift)+'_data.hdf5')
