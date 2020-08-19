@@ -37,17 +37,17 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
                             'initial_x_velocities' : #units: km/s
                             'initial_y_velocities' : #units: km/s
                             'initial_z_velocities' : #units: km/s
+                            'u_band' : #units: Vega magnitudes
+                            'v_band' : #units: Vega magnitudes
+                            'i_band' : #units: AB magnitudes
     """
     stellar_data = {}
     import h5py
-    params = {'stars':'Coordinates,GFM_StellarFormationTime,GFM_InitialMass,GFM_Metallicity,BirthPos,BirthVel'}
+    params = {'stars':'Coordinates,GFM_StellarFormationTime,GFM_InitialMass,GFM_Metallicity,BirthPos,BirthVel,GFM_StellarPhotometrics'}
     #looping through fields makes the code longer for the data manipulation section
     
     import os
     import urllib
-
-    fullfilename = os.path.join('C:/somedir', 'test.html')
-    #urllib.urlretrieve("http://www.google.com", fullfilename)
     
     from pathlib import Path
     new_saved_filename = os.path.join('redshift_'+str(redshift)+'_data', 'cutout_'+str(id)+'_redshift_'+str(redshift)+'_data.hdf5')
@@ -71,6 +71,10 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
             starFormationTime = f['PartType4']['GFM_StellarFormationTime'][:]
             starInitialMass = f['PartType4']['GFM_InitialMass'][:]
             starMetallicity = f['PartType4']['GFM_Metallicity'][:]
+            U = f['PartType4']['GFM_StellarPhotometrics'][:,0] #Vega magnitudes
+            V = f['PartType4']['GFM_StellarPhotometrics'][:,2] #Vega magnitudes
+            I = f['PartType4']['GFM_StellarPhotometrics'][:,6] #AB magnitudes
+
 
         #selecting star particles only
         x_init = x_init[starFormationTime>0]
@@ -85,6 +89,9 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
         starInitialMass = starInitialMass[starFormationTime>0]
         starMetallicity = starMetallicity[starFormationTime>0]
         starFormationTime = starFormationTime[starFormationTime>0]
+        U = U[starFormationTime>0] #Vega magnitudes
+        V = V[starFormationTime>0] #Vega magnitudes
+        I = I[starFormationTime>0] #AB magnitudes
 
         scale_factor = a = 1.0 / (1 + redshift)
         inv_sqrt_a = a**(-1/2)
@@ -125,6 +132,9 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
             d10 = h5f.create_dataset('initial_x_velocities', data = vx_init)
             d11 = h5f.create_dataset('initial_y_velocities', data = vy_init)
             d12 = h5f.create_dataset('initial_z_velocities', data = vz_init)
+            d13 = h5f.create_dataset('u_band', data = U) #Vega magnitudes
+            d14 = h5f.create_dataset('v_band', data = V) #Vega magnitudes
+            d15 = h5f.create_dataset('i_band', data = I) #Vega magnitudes
         #close file
         #h5f.close()
     
@@ -141,6 +151,10 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
         vx_init = h5f_open['initial_x_velocities'][:]
         vy_init = h5f_open['initial_y_velocities'][:]
         vz_init = h5f_open['initial_z_velocities'][:]
+        U = h5f_open['u_band'][:]
+        V = h5f_open['v_band'][:]
+        I = h5f_open['i_band'][:]
+        
     stellar_data = {
                     'relative_x_coordinates' : dx, #units: physical kpc
                     'relative_y_coordinates' : dy, #units: physical kpc
@@ -154,6 +168,9 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
                     'initial_x_velocities' : vx_init, #units: km/s
                     'initial_y_velocities' : vy_init, #units: km/s
                     'initial_z_velocities' : vz_init, #units: km/s
+                    'u_band' : U, #units: Vega magnitudes
+                    'v_band' : V, #units: Vega magnitudes
+                    'i_band' : I, #units: AB magnitudes
                    }
     if populate_dict==False:
         return
@@ -161,6 +178,28 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
         return stellar_data
 
     
+
+def merger_tree(id, redshift):
+    """
+    input params: id==int(must exist in range, pre-check); redshift=redshift (num val)
+    preconditions: uses get() to access subhalo catalog
+    output: saves the merger tree for the subhalo
+    """
+    import os
+    import shutil
+    from pathlib import Path
+    new_saved_filename = os.path.join('redshift_'+str(redshift)+'_data', 'sublink_'+str(id)+'_redshift_'+str(redshift)+'.hdf5')
+    if Path(new_saved_filename).is_file():
+        pass
+    else:
+        url = "http://www.tng-project.org/api/TNG100-1/snapshots/z=" + str(redshift) + "/subhalos/" + str(id)
+        sub = get(url) # get json response of subhalo properties
+        get(sub['trees']['sublink'])
+        shutil.copy2('sublink_'+str(id)+'.hdf5', new_saved_filename) 
+        os.remove('sublink_'+str(id)+'.hdf5')
+    return 
+
+
 
 def get_star_formation_history(id, redshift, plot=False, binwidth=0.05): 
     """
@@ -274,6 +313,73 @@ def halfmass_rad_stars(id, redshift):
     url = "http://www.tng-project.org/api/TNG100-1/snapshots/z=" + str(redshift) + "/subhalos/" + str(id)
     sub = get(url) # get json response of subhalo properties
     return sub['halfmassrad_stars']*a/h
+
+
+
+def halflight_rad_stars(id, redshift, band):
+    """
+    input params: redshift=redshift(num val); id==int(must exist in range, pre-check); band==['U'(Vega magnitude), 
+                                                                                              'V'(Vega magnitude), 
+                                                                                              'I'(AB magnitude),
+                                                                                              'M'(solM) == (test)]
+    preconditions: depends on get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True) output
+                   band must be == 'U'/'V'/'I'/'M'==mass-test
+    output: half-light radius of a galaxy for a given band (U/V/I) in pkpc or half-mass-rad
+    """
+    stellar_data = get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True)
+    dx = stellar_data['relative_x_coordinates']
+    dy = stellar_data['relative_y_coordinates']
+    dz = stellar_data['relative_z_coordinates']
+    R = (dx**2 + dy**2 + dz**2)**(1/2)#units: physical kpc
+    
+    if band=='U':
+        mag = stellar_data['u_band']
+        flux = 10**(-0.4*mag) #flux: flux = 10**(-0.4*mag)
+        zipped_lists = zip(R, flux)
+        sorted_pairs = sorted(zipped_lists)
+
+        tuples = zip(*sorted_pairs)
+        R_sort, band_sort = [list(tuple) for tuple in  tuples]
+
+        band_indices = np.where(np.cumsum(np.array(band_sort))<=0.5*np.sum(np.array(band_sort)))
+        halflight_rad = max(np.array(R_sort)[i] for i in band_indices)[-1]
+    
+    elif band=='V':
+        mag = stellar_data['v_band']
+        flux = 10**(-0.4*mag) #flux
+        zipped_lists = zip(R, flux)
+        sorted_pairs = sorted(zipped_lists)
+
+        tuples = zip(*sorted_pairs)
+        R_sort, band_sort = [list(tuple) for tuple in  tuples]
+
+        band_indices = np.where(np.cumsum(np.array(band_sort))<=0.5*np.sum(np.array(band_sort)))
+        halflight_rad = max(np.array(R_sort)[i] for i in band_indices)[-1]
+    
+    elif band=='I':
+        mag = stellar_data['i_band']
+        flux = 10**(-0.4*mag) #flux
+        zipped_lists = zip(R, flux)
+        sorted_pairs = sorted(zipped_lists)
+
+        tuples = zip(*sorted_pairs)
+        R_sort, band_sort = [list(tuple) for tuple in  tuples]
+
+        band_indices = np.where(np.cumsum(np.array(band_sort))<=0.5*np.sum(np.array(band_sort)))
+        halflight_rad = max(np.array(R_sort)[i] for i in band_indices)[-1]
+    
+    elif band=='M':
+        mass = stellar_data['stellar_initial_masses']
+        zipped_lists = zip(R, mass)
+        sorted_pairs = sorted(zipped_lists)
+
+        tuples = zip(*sorted_pairs)
+        R_sort, band_sort = [list(tuple) for tuple in  tuples]
+
+        band_indices = np.where(np.cumsum(np.array(band_sort))<=0.5*np.sum(np.array(band_sort)))
+        halflight_rad = max(np.array(R_sort)[i] for i in band_indices)[-1]
+
+    return halflight_rad
 
 
 
