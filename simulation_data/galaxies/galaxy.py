@@ -77,7 +77,7 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
 
 
         #selecting star particles only
-        x_init = x_init[starFormationTime>0]
+        x_init = x_init[starFormationTime>0] #ckpc/h
         y_init = y_init[starFormationTime>0]
         z_init = z_init[starFormationTime>0]
         vx_init = vx_init[starFormationTime>0]
@@ -179,7 +179,7 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
 
     
 
-def merger_tree(id, redshift):
+def get_merger_tree(id, redshift):
     """
     input params: id==int(must exist in range, pre-check); redshift=redshift (num val)
     preconditions: uses get() to access subhalo catalog
@@ -341,8 +341,8 @@ def halflight_rad_stars(id, redshift, band):
         tuples = zip(*sorted_pairs)
         R_sort, band_sort = [list(tuple) for tuple in  tuples]
 
-        band_indices = np.where(np.cumsum(np.array(band_sort))<=0.5*np.sum(np.array(band_sort)))
-        halflight_rad = max(np.array(R_sort)[i] for i in band_indices)[-1]
+        band_indices = np.where(np.cumsum(np.array(band_sort))>=0.5*np.sum(np.array(band_sort)))
+        halflight_rad = max(np.array(R_sort)[i] for i in band_indices)
     
     elif band=='V':
         mag = stellar_data['v_band']
@@ -353,8 +353,8 @@ def halflight_rad_stars(id, redshift, band):
         tuples = zip(*sorted_pairs)
         R_sort, band_sort = [list(tuple) for tuple in  tuples]
 
-        band_indices = np.where(np.cumsum(np.array(band_sort))<=0.5*np.sum(np.array(band_sort)))
-        halflight_rad = max(np.array(R_sort)[i] for i in band_indices)[-1]
+        band_indices = np.where(np.cumsum(np.array(band_sort))>=0.5*np.sum(np.array(band_sort)))
+        halflight_rad = max(np.array(R_sort)[i] for i in band_indices)
     
     elif band=='I':
         mag = stellar_data['i_band']
@@ -365,8 +365,8 @@ def halflight_rad_stars(id, redshift, band):
         tuples = zip(*sorted_pairs)
         R_sort, band_sort = [list(tuple) for tuple in  tuples]
 
-        band_indices = np.where(np.cumsum(np.array(band_sort))<=0.5*np.sum(np.array(band_sort)))
-        halflight_rad = max(np.array(R_sort)[i] for i in band_indices)[-1]
+        band_indices = np.where(np.cumsum(np.array(band_sort))>=0.5*np.sum(np.array(band_sort)))
+        halflight_rad = max(np.array(R_sort)[i] for i in band_indices)
     
     elif band=='M':
         mass = stellar_data['stellar_initial_masses']
@@ -376,10 +376,10 @@ def halflight_rad_stars(id, redshift, band):
         tuples = zip(*sorted_pairs)
         R_sort, band_sort = [list(tuple) for tuple in  tuples]
 
-        band_indices = np.where(np.cumsum(np.array(band_sort))<=0.5*np.sum(np.array(band_sort)))
-        halflight_rad = max(np.array(R_sort)[i] for i in band_indices)[-1]
+        band_indices = np.where(np.cumsum(np.array(band_sort))>=0.5*np.sum(np.array(band_sort)))
+        halflight_rad = max(np.array(R_sort)[i] for i in band_indices)
 
-    return halflight_rad
+    return min(halflight_rad)
 
 
 
