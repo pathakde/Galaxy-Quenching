@@ -209,7 +209,7 @@ def get_star_formation_history(id, redshift, plot=False, binwidth=0.05):
     output: (plot=True): plt.hist (SFH, BE)
     """
     stellar_data = get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True)
-    HistWeights = stellar_data['stellar_initial_masses']/(binwidth*1e9)
+    HistWeights = stellar_data['stellar_initial_masses']/(binwidth*1e9) #units: logMsol/yr
     LookbackTime = stellar_data['LookbackTime']
     SFH, BE = np.histogram(LookbackTime, bins=np.arange(0, max(LookbackTime), binwidth), weights=HistWeights)
     bincenters = [(BE[i]+BE[i+1])/2. for i in range(len(BE)-1)]
@@ -241,17 +241,30 @@ def mean_stellar_age(id, redshift):
 
 
 
-def timeaverage_stellar_formation_rate(id, redshift, timescale, start=0):
+def timeaverage_stellar_formation_rate(id, redshift, timescale, start=0, binwidth=0.05):
     """
     input params: redshift=redshift(num val); id==int(must exist in range, pre-check); timescale=num val in range(LT) in units of Gyr; start=num val in range(LT) in units of Gyr, default value == 0
     preconditions: depends on get_stellar_formation_history(redshift = redshift, id = id, plot=False) output; first array BC=bincenters & second array SFH=star formation histories
-    output: average stellar formation rate over a specified timescale, units: $M_\odot$
+    output: average stellar formation rate over a specified timescale, units: $M_\odot$ /yr
     """
-    BC, SFH = get_star_formation_history(redshift = redshift, id = id, plot=False)
+    BC, SFH = get_star_formation_history(redshift = redshift, id = id, plot=False, binwidth=binwidth)
     timescale_indices = np.where((np.array(BC)<=start+timescale+BC[0])&(np.array(BC)>=start)) 
     TimeAvg_SFR = np.sum([SFH[i] for i in timescale_indices]) / len(timescale_indices[0])
         #NOTE: ceiling bin value by BC[0] to accommodate edge case of timescale=start (including 0)
     return TimeAvg_SFR
+
+
+
+def current_star_formation_rate(id, redshift):
+    """
+    input params: id==int(must exist in range, pre-check); redshift=redshift (num val)
+    preconditions: uses get() to access subhalo catalog
+    output: current SFR, units: $M_\odot$ /yr
+    """
+    url = "http://www.tng-project.org/api/TNG100-1/snapshots/z=" + str(redshift) + "/subhalos/" + str(id)
+    sub = get(url) # get json response of subhalo properties
+    return sub['sfr']
+
 
 
 

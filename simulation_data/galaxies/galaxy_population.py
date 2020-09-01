@@ -140,25 +140,25 @@ class GalaxyPopulation():
             return self.calc_mean_stellar_age()
     
     #time avg SFR
-    def calc_timeaverage_stellar_formation_rate(self, calc_timescale, calc_start=0):
+    def calc_timeaverage_stellar_formation_rate(self, calc_timescale, calc_start=0, calc_binwidth=0.05):
         ids = self.ids
         time_averages = np.zeros(len(ids))
         for i, id in enumerate(ids): 
-            time_averages[i] = timeaverage_stellar_formation_rate(redshift = self.redshift, id = id, timescale = calc_timescale, start=calc_start)
+            time_averages[i] = timeaverage_stellar_formation_rate(redshift = self.redshift, id = id, timescale = calc_timescale, start=calc_start, binwidth=calc_binwidth)
         #save file
         np.savetxt( 'z='+str(self.redshift)+ '_TimeAvg_SFR_'+ str(calc_start) + '_' + str(calc_timescale) +'Gyr', time_averages)
         time_avg_SFT = np.loadtxt('z='+str(self.redshift)+ '_TimeAvg_SFR_'+ str(calc_start) + '_' + str(calc_timescale) +'Gyr', dtype=float)
         return time_avg_SFT
     
         
-    def get_timeaverage_stellar_formation_rate(self, timescale, start = 0):
+    def get_timeaverage_stellar_formation_rate(self, timescale, start = 0, binwidth=0.05):
         import pathlib
         file = pathlib.Path('z='+str(self.redshift)+ '_TimeAvg_SFR_'+ str(start) + '_' + str(timescale) +'Gyr')
         if file.exists ():
             time_avg_SFT = np.loadtxt('z='+str(self.redshift)+ '_TimeAvg_SFR_'+ str(start) + '_' + str(timescale) +'Gyr', dtype=float) #rename pre-existing files before parameterizing further
             return time_avg_SFT
         else:
-            return self.calc_timeaverage_stellar_formation_rate(calc_timescale=timescale, calc_start=start)
+            return self.calc_timeaverage_stellar_formation_rate(calc_timescale=timescale, calc_start=start, calc_binwidth=binwidth)
             
     
     #current SFR
@@ -166,14 +166,14 @@ class GalaxyPopulation():
         ids = self.ids
         current_SFRs = np.zeros(len(ids))
         for i, id in enumerate(ids): 
-            current_SFRs[i] = timeaverage_stellar_formation_rate(redshift = self.redshift, id = id, timescale = 0, start = 0)
+            current_SFRs[i] = current_star_formation_rate(redshift = self.redshift, id = id)
         #save file
         np.savetxt( 'z='+ str(self.redshift) +'_Current_SFR', current_SFRs)
         current_SFR = np.loadtxt('z='+ str(self.redshift) +'_Current_SFR', dtype=float)
         return current_SFR
     
         
-    def get_current_stellar_formation_rate(self): #can parameterize for max mass if needed
+    def get_current_stellar_formation_rate(self): 
         import pathlib
         file = pathlib.Path('z='+ str(self.redshift) +'_Current_SFR')
         if file.exists ():
