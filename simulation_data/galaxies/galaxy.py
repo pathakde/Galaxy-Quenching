@@ -209,9 +209,11 @@ def get_star_formation_history(id, redshift, plot=False, binwidth=0.05):
     output: (plot=True): plt.hist (SFH, BE)
     """
     stellar_data = get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True)
-    HistWeights = stellar_data['stellar_initial_masses']/(binwidth*1e9) #units: logMsol/yr
+    HistWeights = stellar_data['stellar_initial_masses']
+    #HistWeights = stellar_data['stellar_initial_masses']/(binwidth*1e9) #units: logMsol/yr
     LookbackTime = stellar_data['LookbackTime']
-    SFH, BE = np.histogram(LookbackTime, bins=np.arange(0, max(LookbackTime), binwidth), weights=HistWeights)
+    SFH, BE = np.histogram(LookbackTime, bins=np.arange(0, max(LookbackTime), binwidth), weights=HistWeights, density = True)
+    #SFH, BE = np.histogram(LookbackTime, bins=np.arange(0, max(LookbackTime), binwidth), weights=HistWeights)
     bincenters = [(BE[i]+BE[i+1])/2. for i in range(len(BE)-1)]
     if plot==False:
         return bincenters, SFH
@@ -477,3 +479,110 @@ def metallicity_profile(id, redshift, n_bins=20, scatter=False):
         plt.yscale('log')
         plt.show()
         return plt.show()
+
+    
+    
+    
+def particle_age_profile(id, redshift, n_bins=70, binwidth = 0.10):
+    """
+    input params: id==int(must exist in range, pre-check); redshift=redshift (num val); n_bins==int(num of bins for percentile-count stellar particle partition, default value = 70); binwidth==float(width of histy bins)
+    preconditions: depends on get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True) output
+    output: plot of scatter ages + median age profile + y-hist of age trends
+    """
+    
+    def colorbar(mappable):
+        from mpl_toolkits.axes_grid1 import make_axes_locatable
+        import matplotlib.pyplot as plt
+        last_axes = plt.gca()
+        ax = mappable.axes
+        fig = ax.figure
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        cbar = fig.colorbar(mappable, cax=cax)
+        cbar.set_boundaries=np.linspace(-3.1,1.1,100)
+        cbar.set_label('Metallicity ($\log_{10}$ $Z_\odot$)',size=12)
+        plt.sca(last_axes)
+        return cbar
+
+    # Define colorbar
+    colors = [(0.3, 0.76, 1), (0, 0, 0), (1, 0.3, 0.3)]  # Bu ->  Blk  -> R
+    #n_bins = [3, 6, 10, 100]  # Discretizes the interpolation into bins
+    cmap_name = 'my_list'
+
+    # Create the colormap
+    from matplotlib.colors import LinearSegmentedColormap
+    cm = LinearSegmentedColormap.from_list(
+            cmap_name, colors, N=100) 
+
+
+    # populating dictionary
+    stellar_data = get_galaxy_particle_data(id=id, redshift=redshift, populate_dict=True)
+
+    #getting data from arrays
+    LookbackTime = stellar_data['LookbackTime']
+    dx = stellar_data['relative_x_coordinates']
+    dy = stellar_data['relative_y_coordinates']
+    dz = stellar_data['relative_z_coordinates']
+    metallicity = stellar_data['stellar_metallicities']
+    R = (dx**2 + dy**2 + dz**2)**(1/2)
+
+    
+    radial_percentiles = np.zeros(n_bins + 1) #N+1 for N percentiles 
+    for i in range(1, (n_bins+1)):
+        radial_percentiles[i] = np.percentile(R, (100/n_bins)*i) 
+    R_e = np.nanmedian(R)
+    statistic, bin_edges, bin_number = scipy.stats.binned_statistic(R, LookbackTime, 'median', bins=radial_percentiles)
+
+    x = R/R_e #np.log10(R/R_e)
+    y = LookbackTime #np.log10(LookbackTime)
+
+    # definitions for the axes
+    left, width = 0.1, 0.65
+    bottom, height = 0.1, 0.65
+    spacing = 0.09
+
+
+    rect_scatter = [left, bottom, width, height]
+    #rect_histx = [left, bottom + height + spacing, width, 0.2]
+    rect_histy = [left + width + spacing, bottom, 0.2, height]
+
+    # start with a rectangular Figure
+    plt.figure(figsize=(10, 10))
+
+    ax_scatter = plt.axes(rect_scatter)
+    ax_scatter.tick_params(direction='in', top=True, right=True)
+
+    #ax_histx = plt.axes(rect_histx)
+    #ax_histx.tick_params(direction='in', labelbottom=True)
+    ax_histy = plt.axes(rect_histy)
+    ax_histy.tick_params(direction='in', labelleft=True)
+
+
+    # the scatter plot:
+    im = ax_scatter.scatter(x, y, s=0.5, alpha=0.7, c=np.log10(metallicity), cmap=cm, vmin=-3, vmax=1)
+    ax_scatter.plot(np.array(radial_percentiles[1:]/R_e)[4:-4], np.array(statistic)[4:-4], c='k')
+    #ax_scatter.colorbar(boundaries=np.linspace(-3.1,1.1,100), label='Metallicities of Stars ($\log_{10}$ $Z_\odot$)')
+    ax_scatter.set_xlabel("Radial Distance ($R_e$) | id = " + str(id))
+    ax_scatter.set_ylabel("Stellar Age in Lookback Time (Gyr)")
+    ax_scatter.set_xscale('log')
+    #ax_scatter.set_yscale('log')
+
+    # Colorbar
+    colorbar(im)
+
+    # now determine nice limits by hand:
+    
+    #lim = np.ceil(np.abs([x, y]).max() / binwidth) * binwidth
+    ax_scatter.set_xlim((min(x), max(x)))
+    ax_scatter.set_ylim((min(y), max(y)))
+
+    x_bins = np.arange(min(x), max(x) + binwidth, binwidth) #np.linspace, #np.logspace
+    y_bins = np.arange(min(y), max(y) + binwidth, binwidth)
+    #ax_histx.hist(x, bins=x_bins, histtype = 'step') #add xlabels
+    ax_histy.hist(y, bins=y_bins, histtype = 'step', orientation='horizontal')
+
+    #ax_histx.set_xlim(ax_scatter.get_xlim())
+    ax_histy.set_ylim(ax_scatter.get_ylim())
+
+    #plt.tight_layout()
+    return plt.show()    
