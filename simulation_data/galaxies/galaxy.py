@@ -40,10 +40,11 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
                             'u_band' : #units: Vega magnitudes
                             'v_band' : #units: Vega magnitudes
                             'i_band' : #units: AB magnitudes
+                            'ParticleIDs' : #units: n/a
     """
     stellar_data = {}
     import h5py
-    params = {'stars':'Coordinates,GFM_StellarFormationTime,GFM_InitialMass,GFM_Metallicity,BirthPos,BirthVel,GFM_StellarPhotometrics'}
+    params = {'stars':'ParticleIDs,Coordinates,GFM_StellarFormationTime,GFM_InitialMass,GFM_Metallicity,BirthPos,BirthVel,GFM_StellarPhotometrics'}
     #looping through fields makes the code longer for the data manipulation section
     
     import os
@@ -53,8 +54,32 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
     new_saved_filename = os.path.join('redshift_'+str(redshift)+'_data', 'cutout_'+str(id)+'_redshift_'+str(redshift)+'_data.hdf5')
 
     if Path('redshift_'+str(redshift)+'_data\cutout_'+str(id)+'_redshift_'+str(redshift)+'_data.hdf5').is_file():
-        pass
+        with h5py.File(new_saved_filename, 'r+') as f:
+            if 'ParticleIDs' in f.keys():
+                pass
+            else:
+                params = {'stars':'ParticleIDs,GFM_StellarFormationTime'}
+                url = "http://www.tng-project.org/api/TNG100-1/snapshots/z=" + str(redshift) + "/subhalos/" + str(id)
+                sub = get(url) # get json response of subhalo properties
+                saved_filename = get(url + "/cutout.hdf5",params) # get and save HDF5 cutout file
+                with h5py.File(saved_filename, mode='r') as f: #read from h5py file
+                #selecting star particles only
+                    starFormationTime = f['PartType4']['GFM_StellarFormationTime'][:]
+                    ParticleIDs = f['PartType4']['ParticleIDs'][:]
+                ParticleIDs = ParticleIDs[starFormationTime>0]
+                starFormationTime = starFormationTime[starFormationTime>0]
+
+                #delete pre-existing file since this is faster than replacing each field
+                import os
+                os.remove('cutout_'+str(id)+'.hdf5')
+                #create new file with same filename
+                new_saved_filename = os.path.join('redshift_'+str(redshift)+'_data', 'cutout_' + str(id) + '_redshift_' + str(redshift) + '_data.hdf5')
+                #new_saved_filename = 'cutout_'+str(id)+'_redshift_'+str(redshift)+'_data.hdf5'
+                with h5py.File(new_saved_filename, 'a') as h5f:
+                    #writing data
+                    d16 = h5f.create_dataset('ParticleIDs', data = ParticleIDs) 
     else:
+        params = {'stars':'ParticleIDs,Coordinates,GFM_StellarFormationTime,GFM_InitialMass,GFM_Metallicity,BirthPos,BirthVel,GFM_StellarPhotometrics'}
         url = "http://www.tng-project.org/api/TNG100-1/snapshots/z=" + str(redshift) + "/subhalos/" + str(id)
         sub = get(url) # get json response of subhalo properties
         saved_filename = get(url + "/cutout.hdf5",params) # get and save HDF5 cutout file
@@ -74,6 +99,7 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
             U = f['PartType4']['GFM_StellarPhotometrics'][:,0] #Vega magnitudes
             V = f['PartType4']['GFM_StellarPhotometrics'][:,2] #Vega magnitudes
             I = f['PartType4']['GFM_StellarPhotometrics'][:,6] #AB magnitudes
+            ParticleIDs = f['PartType4']['ParticleIDs'][:]
 
 
         #selecting star particles only
@@ -88,11 +114,12 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
         dz = dz[starFormationTime>0]
         starInitialMass = starInitialMass[starFormationTime>0]
         starMetallicity = starMetallicity[starFormationTime>0]
-        starFormationTime = starFormationTime[starFormationTime>0]
         U = U[starFormationTime>0] #Vega magnitudes
         V = V[starFormationTime>0] #Vega magnitudes
         I = I[starFormationTime>0] #AB magnitudes
-
+        ParticleIDs = ParticleIDs[starFormationTime>0]
+        starFormationTime = starFormationTime[starFormationTime>0]
+        
         scale_factor = a = 1.0 / (1 + redshift)
         inv_sqrt_a = a**(-1/2)
         #unit conversions
@@ -135,6 +162,7 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
             d13 = h5f.create_dataset('u_band', data = U) #Vega magnitudes
             d14 = h5f.create_dataset('v_band', data = V) #Vega magnitudes
             d15 = h5f.create_dataset('i_band', data = I) #Vega magnitudes
+            d16 = h5f.create_dataset('ParticleIDs', data = ParticleIDs) 
         #close file
         #h5f.close()
     
@@ -154,6 +182,7 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
         U = h5f_open['u_band'][:]
         V = h5f_open['v_band'][:]
         I = h5f_open['i_band'][:]
+        ParticleIDs = h5f_open['ParticleIDs'][:]
         
     stellar_data = {
                     'relative_x_coordinates' : dx, #units: physical kpc
@@ -171,11 +200,76 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
                     'u_band' : U, #units: Vega magnitudes
                     'v_band' : V, #units: Vega magnitudes
                     'i_band' : I, #units: AB magnitudes
+                    'ParticleIDs' : ParticleIDs,
                    }
     if populate_dict==False:
         return
     else:
         return stellar_data
+
+    
+    
+    
+def accreted_stellar_fraction(id, redshift = 2):
+    """
+    input params: id==int(must exist in range, pre-check); redshift=redshift (num val)
+    preconditions: uses get() to access subhalo catalog
+                   stars_033.hdf5 for z=2 neccessary
+                   hard coded for z=2, not for other redshifts
+    """
+    
+    #open In-stu vs Ex-situ data file for z=2
+    import h5py
+    with h5py.File('stars_033.hdf5', 'r') as f:
+        #print(f.keys())
+        stars_ParticleID = f['ParticleID'][:]
+        stars_InSitu = f['InSitu'][:]
+        
+    #open galaxy particle data file
+    stellar_data = get_galaxy_particle_data(id=id, redshift=redshift, populate_dict=True)
+    #access particle IDs
+    ParticleIDs = stellar_data['ParticleIDs']
+    
+    #In-situ vs Ex-situ selection for galaxy
+    star_file_indices = np.where(np.in1d(stars_ParticleID, ParticleIDs))[0]
+    galaxy_stars_flag = stars_InSitu[star_file_indices]
+    
+    #find accreted fraction
+    accreted_fraction = len(galaxy_stars_flag[galaxy_stars_flag==0])/len(galaxy_stars_flag)
+    
+    #print('id='+str(id)+' | accreted fraction='+str(accreted_fraction))
+    return accreted_fraction
+        
+    
+    
+def age_gradient(id, redshift):
+    """
+    input params: id==int(must exist in range, pre-check); redshift=redshift (num val)
+    preconditions: uses get() to access subhalo catalog
+    output: saves the merger tree for the subhalo
+    """
+    import scipy
+    stellar_data = get_galaxy_particle_data(id=id, redshift=redshift, populate_dict=True)
+    
+    #getting data from arrays
+    LookbackTime = stellar_data['LookbackTime']
+    dx = stellar_data['relative_x_coordinates']
+    dy = stellar_data['relative_y_coordinates']
+    dz = stellar_data['relative_z_coordinates']
+    R = (dx**2 + dy**2 + dz**2)**(1/2)
+
+    n_bins = 100
+    radial_percentiles = np.zeros(n_bins + 1) #N+1 for N percentiles 
+    for i in range(1, (n_bins+1)):
+        radial_percentiles[i] = np.percentile(R, (100/n_bins)*i) 
+    R_e = np.nanmedian(R)
+    statistic, bin_edges, bin_number = scipy.stats.binned_statistic(R, LookbackTime, 'median', bins=radial_percentiles)
+    
+    #calculate age gradient:: Units: Gyr
+    #avg(75~90th percentile) - avg(10~25th percentile)
+    age_grad = np.average(statistic[75:90]) - np.average(statistic[10:25])
+    
+    return age_grad
 
     
 
@@ -403,7 +497,7 @@ def age_profile(id, redshift, n_bins=20, scatter=False):
     input params: id==int(must exist in range, pre-check); redshift=redshift (num val); n_bins==int(num of bins for percentile-count stellar particle partition, default value = 20)
     preconditions: depends on get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True) output
     output: statistic = median ages of binned stellar particles (units: Gyr); 
-            percentile cutoffs for radial distances =  radial_percentiles[1:]/R_e = percentile bin-edges for normalized radial distance of stellar particle from subhalo center (unitless); 
+            percentile cutoffs for radial distances =  radial_percentiles[1:] = percentile bin-edges for  radial distance of stellar particle from subhalo center (unitless); 
             R_e = effective (median) radius of stellar particles in subhalo (units: physical kpc)
     """
     stellar_data = get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True)
@@ -421,7 +515,8 @@ def age_profile(id, redshift, n_bins=20, scatter=False):
     statistic, bin_edges, bin_number = scipy.stats.binned_statistic(R, LookbackTime, 'median', bins=radial_percentiles)
     
     if scatter==False:
-        return statistic, radial_percentiles[:-1]/R_e, R_e, R/R_e, LookbackTime, np.log10(metallicity)
+        return statistic, radial_percentiles[:-1], R_e, R/R_e, LookbackTime, np.log10(metallicity)
+        #return statistic, radial_percentiles[:-1]/R_e, R_e, R/R_e, LookbackTime, np.log10(metallicity)
     else:
         plt.figure(figsize=(10,7)) # 10 is width, 7 is height
         plt.scatter(R/R_e, LookbackTime, c=np.log10(metallicity), s=0.5, alpha=0.7)#c=np.log10(metallicity)

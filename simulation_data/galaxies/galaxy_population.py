@@ -7,7 +7,7 @@ import requests
 #import get()
 from simulation_data import get
 
-from .galaxy import mean_stellar_age, timeaverage_stellar_formation_rate, median_stellar_age, mean_stellar_metallicity, age_profile, mean_stellar_mass, total_stellar_mass, halfmass_rad_stars, halflight_rad_stars
+from .galaxy import mean_stellar_age, timeaverage_stellar_formation_rate, median_stellar_age, mean_stellar_metallicity, age_profile, mean_stellar_mass, total_stellar_mass, halfmass_rad_stars, halflight_rad_stars, accreted_stellar_fraction, age_gradient, current_star_formation_rate
 
 class GalaxyPopulation():
     
@@ -65,6 +65,10 @@ class GalaxyPopulation():
                 d15 = f.create_dataset('halflight_radius_V', data = self.get_halflight_rad_stars(band='V'))
                 d16 = f.create_dataset('halflight_radius_I', data = self.get_halflight_rad_stars(band='I'))
                 d17 = f.create_dataset('halfmass_radius_calculated', data = self.get_halflight_rad_stars(band='M'))
+                d18 = f.create_dataset('current_sSFR', data = my_galaxy_population.get_current_stellar_formation_rate()/10**(my_galaxy_population.get_total_stellar_mass()))
+                d19 = f.create_dataset('newbin_current_SFR', data = my_galaxy_population.get_timeaverage_stellar_formation_rate(timescale=0, binwidth=0.01))
+                d20 = f.create_dataset('age_gradient', data = my_galaxy_population.get_age_gradient())
+                d21 = f.create_dataset('accreted_stellar_fraction', data = my_galaxy_population.get_accreted_stellar_fraction())
                 
         with h5py.File('galaxy_population_data_'+str(self.redshift)+'.hdf5', 'r') as f:
             ids = f['ids'][:]
@@ -84,6 +88,10 @@ class GalaxyPopulation():
             halflight_radius_V = f['halflight_radius_V'][:]
             halflight_radius_I = f['halflight_radius_I'][:]
             halfmass_radius_calculated = f['halfmass_radius_calculated'][:]
+            current_sSFR = f['current_sSFR'][:]
+            newbin_current_SFR = f['newbin_current_SFR'][:]
+            age_gradient = f['age_gradient'][:]
+            accreted_stellar_fraction = f['accreted_stellar_fraction'][:]
         galaxy_population_data = {
                                     'ids': ids,
                                     'mean_age': mean_age,
@@ -101,7 +109,11 @@ class GalaxyPopulation():
                                     'halflight_radius_U': halflight_radius_U,
                                     'halflight_radius_V': halflight_radius_V,
                                     'halflight_radius_I': halflight_radius_I,
-                                    'halfmass_radius_calculated': halfmass_radius_calculated
+                                    'halfmass_radius_calculated': halfmass_radius_calculated,
+                                    'current_sSFR': current_sSFR,
+                                    'newbin_current_SFR': newbin_current_SFR,
+                                    'age_gradient': age_gradient,
+                                    'accreted_stellar_fraction': accreted_stellar_fraction
                                  }
         return galaxy_population_data
 
@@ -366,4 +378,47 @@ class GalaxyPopulation():
             return self.calc_halflight_rad_stars(calc_band = band)
         
         
+
+    #accreted stellar fractions    
+    def calc_accreted_stellar_fraction(self):
+        ids = self.ids
+        accreted_frac = np.zeros(len(ids))
+        for i, id in enumerate(ids): 
+            accreted_frac[i] = accreted_stellar_fraction(redshift = self.redshift, id = id)
+        #save file
+        np.savetxt('z='+str(self.redshift)+'_accreted_stellar_fraction', accreted_frac)
+        accreted_fraction = np.loadtxt('z='+str(self.redshift)+'_accreted_stellar_fraction', dtype=float)
+        return accreted_fraction
+    
+    
+    def get_accreted_stellar_fraction(self): 
+        import pathlib
+        file = pathlib.Path('z='+str(self.redshift)+'_accreted_stellar_fraction')
+        if file.exists ():
+            accreted_fraction = np.loadtxt('z='+str(self.redshift)+'_accreted_stellar_fraction', dtype=float) #rename pre-existing files before parameterizing further
+            return accreted_fraction
+        else:
+            return self.calc_accreted_stellar_fraction()
         
+        
+        
+    #age gradient: in Gyr 
+    def calc_age_gradient(self):
+        ids = self.ids
+        age_grad = np.zeros(len(ids))
+        for i, id in enumerate(ids): 
+            age_grad[i] = age_gradient(redshift = self.redshift, id = id)
+        #save file
+        np.savetxt('z='+str(self.redshift)+'_age_gradient', age_grad)
+        age_grad = np.loadtxt('z='+str(self.redshift)+'_age_gradient', dtype=float)
+        return age_grad
+    
+    
+    def get_age_gradient(self): 
+        import pathlib
+        file = pathlib.Path('z='+str(self.redshift)+'_age_gradient')
+        if file.exists ():
+            age_grad = np.loadtxt('z='+str(self.redshift)+'_age_gradient', dtype=float) #rename pre-existing files before parameterizing further
+            return age_grad
+        else:
+            return self.calc_age_gradient()
