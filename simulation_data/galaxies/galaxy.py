@@ -30,6 +30,7 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
                             'relative_z_coordinates' : #units: physical kpc
                             'LookbackTime' : #units: Gyr
                             'stellar_initial_masses' : #units: solar mass
+                            'stellar_masses' : #units: solar mass
                             'stellar_metallicities' : #units: solar metallicity  
                             'initial_x_coordinates' : #units: physical kpc
                             'initial_y_coordinates' : #units: physical kpc
@@ -44,42 +45,40 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
     """
     stellar_data = {}
     import h5py
-    params = {'stars':'ParticleIDs,Coordinates,GFM_StellarFormationTime,GFM_InitialMass,GFM_Metallicity,BirthPos,BirthVel,GFM_StellarPhotometrics'}
-    #looping through fields makes the code longer for the data manipulation section
-    
     import os
     import urllib
     
     from pathlib import Path
     new_saved_filename = os.path.join('redshift_'+str(redshift)+'_data', 'cutout_'+str(id)+'_redshift_'+str(redshift)+'_data.hdf5')
 
+
     if Path('redshift_'+str(redshift)+'_data\cutout_'+str(id)+'_redshift_'+str(redshift)+'_data.hdf5').is_file():
-        with h5py.File(new_saved_filename, 'r+') as f:
-            if 'ParticleIDs' in f.keys():
+        #pass
+        with h5py.File(new_saved_filename, 'r+') as fr:
+            if 'stellar_masses' in fr.keys():
                 pass
             else:
-                params = {'stars':'ParticleIDs,GFM_StellarFormationTime'}
+                params = {'stars':'Masses,GFM_StellarFormationTime'}
                 url = "http://www.tng-project.org/api/TNG100-1/snapshots/z=" + str(redshift) + "/subhalos/" + str(id)
                 sub = get(url) # get json response of subhalo properties
                 saved_filename = get(url + "/cutout.hdf5",params) # get and save HDF5 cutout file
                 with h5py.File(saved_filename, mode='r') as f: #read from h5py file
                 #selecting star particles only
                     starFormationTime = f['PartType4']['GFM_StellarFormationTime'][:]
-                    ParticleIDs = f['PartType4']['ParticleIDs'][:]
-                ParticleIDs = ParticleIDs[starFormationTime>0]
-                starFormationTime = starFormationTime[starFormationTime>0]
+                    starMass = f['PartType4']['Masses'][:]
+                starMass = starMass[starFormationTime>0]
+                starMass = starMass*1e10/h #units:solar mass
 
                 #delete pre-existing file since this is faster than replacing each field
                 import os
                 os.remove('cutout_'+str(id)+'.hdf5')
                 #create new file with same filename
-                new_saved_filename = os.path.join('redshift_'+str(redshift)+'_data', 'cutout_' + str(id) + '_redshift_' + str(redshift) + '_data.hdf5')
-                #new_saved_filename = 'cutout_'+str(id)+'_redshift_'+str(redshift)+'_data.hdf5'
-                with h5py.File(new_saved_filename, 'a') as h5f:
-                    #writing data
-                    d16 = h5f.create_dataset('ParticleIDs', data = ParticleIDs) 
+                #new_saved_filename = os.path.join('redshift_'+str(redshift)+'_data', 'cutout_' + str(id) + '_redshift_' + str(redshift) + '_data.hdf5')
+                ##!!!!!!****USE 'a' NEVER USE 'w'****!!!!!!!!
+                d17 = fr.create_dataset('stellar_masses', data = starMass)
+    
     else:
-        params = {'stars':'ParticleIDs,Coordinates,GFM_StellarFormationTime,GFM_InitialMass,GFM_Metallicity,BirthPos,BirthVel,GFM_StellarPhotometrics'}
+        params = {'stars':'ParticleIDs,Coordinates,GFM_StellarFormationTime,GFM_InitialMass,GFM_Metallicity,BirthPos,BirthVel,GFM_StellarPhotometrics,Masses'}
         url = "http://www.tng-project.org/api/TNG100-1/snapshots/z=" + str(redshift) + "/subhalos/" + str(id)
         sub = get(url) # get json response of subhalo properties
         saved_filename = get(url + "/cutout.hdf5",params) # get and save HDF5 cutout file
@@ -95,6 +94,7 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
             dz = f['PartType4']['Coordinates'][:,2] - sub['pos_z']
             starFormationTime = f['PartType4']['GFM_StellarFormationTime'][:]
             starInitialMass = f['PartType4']['GFM_InitialMass'][:]
+            starMass = f['PartType4']['Masses'][:]
             starMetallicity = f['PartType4']['GFM_Metallicity'][:]
             U = f['PartType4']['GFM_StellarPhotometrics'][:,0] #Vega magnitudes
             V = f['PartType4']['GFM_StellarPhotometrics'][:,2] #Vega magnitudes
@@ -113,6 +113,7 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
         dy = dy[starFormationTime>0]
         dz = dz[starFormationTime>0]
         starInitialMass = starInitialMass[starFormationTime>0]
+        starMass = starMass[starFormationTime>0]
         starMetallicity = starMetallicity[starFormationTime>0]
         U = U[starFormationTime>0] #Vega magnitudes
         V = V[starFormationTime>0] #Vega magnitudes
@@ -120,8 +121,10 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
         ParticleIDs = ParticleIDs[starFormationTime>0]
         starFormationTime = starFormationTime[starFormationTime>0]
         
+        
         scale_factor = a = 1.0 / (1 + redshift)
         inv_sqrt_a = a**(-1/2)
+        
         #unit conversions
         x_init = x_init*a/h #units: physical kpc
         y_init = y_init*a/h #units: physical kpc
@@ -135,6 +138,7 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
         starFormationTime = 1/starFormationTime - 1 #units:scale factor
         starFormationTime = cosmo.age(starFormationTime).value #units:Gyr
         starInitialMass = starInitialMass*1e10/h #units:solar mass
+        starMass = starMass*1e10/h #units:solar mass
         Gyr_redshift = cosmo.age(redshift).value #units:Gyr
         LookbackTime = Gyr_redshift - starFormationTime #units:Gyr
         starMetallicity = starMetallicity / 0.0127 #units: solar metallicity
@@ -163,10 +167,11 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
             d14 = h5f.create_dataset('v_band', data = V) #Vega magnitudes
             d15 = h5f.create_dataset('i_band', data = I) #Vega magnitudes
             d16 = h5f.create_dataset('ParticleIDs', data = ParticleIDs) 
+            d17 = h5f.create_dataset('stellar_masses', data = starMass)
         #close file
         #h5f.close()
     
-    with h5py.File(new_saved_filename, 'r+') as h5f_open:
+    with h5py.File(new_saved_filename, 'r') as h5f_open:
         dx = h5f_open['relative_x_coordinates'][:]
         dy = h5f_open['relative_y_coordinates'][:]
         dz = h5f_open['relative_z_coordinates'][:]
@@ -183,14 +188,23 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
         V = h5f_open['v_band'][:]
         I = h5f_open['i_band'][:]
         ParticleIDs = h5f_open['ParticleIDs'][:]
+        stellar_masses = h5f_open['stellar_masses'][:]
+        MergerMassRatio = h5f_open['MergerMassRatio'][:]
+        insitu_exsitu = h5f_open['insitu_exsitu'][:]
+        '''
+        Gas_relative_x_coordinates = h5f_open['Gas_relative_x_coordinates'][:]
+        Gas_relative_y_coordinates = h5f_open['Gas_relative_y_coordinates'][:]
+        Gas_relative_z_coordinates = h5f_open['Gas_relative_z_coordinates'][:]
+        Gas_masses = h5f_open['Gas_masses'][:]
+        '''
         
     stellar_data = {
                     'relative_x_coordinates' : dx, #units: physical kpc
                     'relative_y_coordinates' : dy, #units: physical kpc
                     'relative_z_coordinates' : dz, #units: physical kpc
-                    'LookbackTime' : LookbackTime, #units:Gyr
-                    'stellar_initial_masses' : starInitialMass, #units:solar mass
-                    'stellar_metallicities' : starMetallicity, #units:solar metallicity
+                    'LookbackTime' : LookbackTime, #units: Gyr
+                    'stellar_initial_masses' : starInitialMass, #units: solar mass
+                    'stellar_metallicities' : starMetallicity, #units: solar metallicity
                     'initial_x_coordinates' : x_init, #units: physical kpc
                     'initial_y_coordinates' : y_init, #units: physical kpc
                     'initial_z_coordinates' : z_init, #units: physical kpc
@@ -201,7 +215,17 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
                     'v_band' : V, #units: Vega magnitudes
                     'i_band' : I, #units: AB magnitudes
                     'ParticleIDs' : ParticleIDs,
-                   }
+                    'stellar_masses': stellar_masses, #units: solar mass
+                    'MergerMassRatio': MergerMassRatio,
+                    'insitu_exsitu': insitu_exsitu, #0=exsitu; 1=insitu
+                    }
+    '''
+                    'Gas_relative_x_coordinates': Gas_relative_x_coordinates, #units: physical kpc
+                    'Gas_relative_y_coordinates': Gas_relative_y_coordinates, #units: physical kpc
+                    'Gas_relative_z_coordinates': Gas_relative_z_coordinates, #units: physical kpc
+                    'Gas_masses': Gas_masses, #units: solar mass 
+    '''
+                   
     if populate_dict==False:
         return
     else:
@@ -210,7 +234,110 @@ def get_galaxy_particle_data(id, redshift, populate_dict=False):
     
     
     
-def accreted_stellar_fraction(id, redshift = 2):
+def gas_data_download(id, redshift):
+    h = 0.6774
+    import h5py
+    import os
+    
+    new_saved_filename = os.path.join('redshift_'+str(redshift)+'_data', 'cutout_'+str(id)+'_redshift_'+str(redshift)+'_data.hdf5')
+
+    params = {'gas':'Coordinates,Masses'}
+    url = "http://www.tng-project.org/api/TNG100-1/snapshots/z=" + str(redshift) + "/subhalos/" + str(id)
+    sub = get(url) # get json response of subhalo properties
+    saved_filename = get(url + "/cutout.hdf5",params) # get and save HDF5 cutout file
+    with h5py.File(saved_filename, mode='r') as f: #read from h5py file
+    #selecting gas cells only
+        if 'PartType0' in f.keys():
+            gas_dx = f['PartType0']['Coordinates'][:,0] - sub['pos_x']
+            gas_dy = f['PartType0']['Coordinates'][:,1] - sub['pos_y']
+            gas_dz = f['PartType0']['Coordinates'][:,2] - sub['pos_z']
+            #gas_density = f['PartType0']['Density'][:] #(10^10*M⊙/h)/(ckpc/h)^3
+            gas_masses = f['PartType0']['Masses'][:]
+        #gas_inteng = f['PartType0']['InternalEnergy'][:]
+        else:
+            gas_dx = np.zeros(0)
+            gas_dy = np.zeros(0)
+            gas_dz = np.zeros(0)
+            gas_masses = np.zeros(0)
+
+    scale_factor = a = 1.0 / (1 + redshift)
+    gas_dx = gas_dx*a/h #units: physical kpc
+    gas_dy = gas_dy*a/h #units: physical kpc
+    gas_dz = gas_dz*a/h #units: physical kpc
+    gas_masses = gas_masses*1e10/h #units:solar mass
+
+    #delete pre-existing file since this is faster than replacing each field
+    os.remove('cutout_'+str(id)+'.hdf5')
+    #create new file with same filename
+    #new_saved_filename = os.path.join('redshift_'+str(redshift)+'_data', 'cutout_' + str(id) + '_redshift_' + str(redshift) + '_data.hdf5')
+    ##!!!!!!****USE 'a'!!! NEVER USE 'w'****!!!!!!!!
+    with h5py.File(new_saved_filename, mode='a') as f:
+        d22 = f.create_dataset('Gas_relative_x_coordinates', data = gas_dx)
+        d23 = f.create_dataset('Gas_relative_y_coordinates', data = gas_dy)
+        d24 = f.create_dataset('Gas_relative_z_coordinates', data = gas_dz)
+        d25 = f.create_dataset('Gas_masses', data = gas_masses)
+    return
+    
+
+    
+    
+    
+def add_stellar_assembly_data(id, redshift = 2):
+    """
+    adds data from Stellar Assembly Files
+    input params: id==int(must exist in range, pre-check); redshift=redshift (num val)
+    preconditions: uses get() to access subhalo catalog
+                   stars_033.hdf5 for z=2 neccessary
+                   hard coded for z=2, not for other redshifts
+    with the following fields:::
+        ParticleID : The particle ID, in the same order as in the corresponding snapshot files.
+        SubfindID : Subfind ID of the subhalo in which the stellar particle is currently found; -1 if the particle does not belong to any subhalo.
+        SubfindIDAtFormation : Subfind ID of the subhalo in which the stellar particle first appeared; -1 if it was formed outside of any subhalo.
+        SnapNumAtFormation : Snapshot number in which the stellar particle first appeared.
+        InSitu : 1 if the stellar particle was formed in situ, 0 if it was formed ex situ, and -1 if it does not currently belong to any subhalo. A stellar particle is considered to have been formed in situ if the subhalo in which it was formed lies along the "main branch" of the subhalo in which the stellar particle is currently found. This is decided using the SubLink "baryonic" merger trees.
+        AfterInfall : 1 if the subhalo in which the stellar particle first appeared had already "infalled" into the halo (FoF group) where it is currently found; 0 otherwise; -1 if not applicable (i.e., if the particle was formed in situ or if it was formed outside of any subhalo).
+        AccretionOrigin : This dataset can take the following integer values: 0, 1, and 2 for ex situ stellar particles that were accreted from completed mergers (i.e., when the subhalo in which the stellar particle formed has already merged with the current subhalo), ongoing mergers (i.e., when the subhalo in which the stellar particle formed has not yet merged with the current subhalo, but will do so at a later snapshot in the simulation), and flybys (i.e., when the subhalo in which the stellar particle formed has not merged with the current subhalo, and will not do so at any future snapshot in the simulation), respectively; and -1 if not applicable (i.e., if the particle was formed in situ or if it was formed outside of any subhalo). NOTE: towards the end of the simulation, it becomes impossible to distinguish a flyby from an ongoing merger. Therefore, cases (1) and (2) are usually considered as being part of the same category: "stripped from surviving galaxies" (Rodriguez-Gomez et al. 2016).
+        MergerMassRatio : The stellar mass ratio of the merger in which a given ex-situ stellar particle was accreted (if applicable). The mass ratio is measured at the time when the secondary progenitor reaches its maximum stellar mass. NOTE: this quantity was calculated also in the case of flybys, without a merger actually happening.
+        DistanceAtFormation : The galactocentric distance when the stellar particle was formed, given in units of the stellar half-mass radius of the parent galaxy at the formation time.
+
+    """
+    
+    #open Stellar Assembly data file for z=2
+    import h5py
+    with h5py.File('stars_033.hdf5', 'r') as f:
+        #print(f.keys())
+        stars_ParticleID = f['ParticleID'][:]
+        #stars_InSitu = f['InSitu'][:]
+        AfterInfall = f['AfterInfall'][:]
+        AccretionOrigin = f['AccretionOrigin'][:]
+        MergerMassRatio = f['MergerMassRatio'][:]
+
+    #open galaxy particle data file
+    stellar_data = get_galaxy_particle_data(id=id, redshift=redshift, populate_dict=True)
+    #access particle IDs
+    ParticleIDs = stellar_data['ParticleIDs']
+
+    #select all the stars in a chosen galaxy from accretion data files
+    star_file_indices = np.where(np.in1d(stars_ParticleID, ParticleIDs))[0]
+    #galaxy_stars_flag = stars_InSitu[star_file_indices] #in/ex situ data for this galaxy
+    AfterInfall_flag = AfterInfall[star_file_indices]
+    AccretionOrigin_flag = AccretionOrigin[star_file_indices]
+    MergerMassRatio_flag = MergerMassRatio[star_file_indices]
+    
+    import os
+    new_saved_filename = os.path.join('redshift_'+str(redshift)+'_data', 'cutout_'+str(id)+'_redshift_'+str(redshift)+'_data.hdf5')
+    with h5py.File(new_saved_filename, 'a') as h5f:
+        d18 = h5f.create_dataset('insitu_exsitu', data = galaxy_stars_flag)
+        d19 = h5f.create_dataset('AfterInfall', data = AfterInfall_flag)
+        d20 = h5f.create_dataset('AccretionOrigin', data = AccretionOrigin_flag)
+        d21 = h5f.create_dataset('MergerMassRatio', data = MergerMassRatio_flag)
+
+    return
+    
+    
+    
+'''    
+def accreted_stellar_number_fraction(id, redshift = 2):
     """
     input params: id==int(must exist in range, pre-check); redshift=redshift (num val)
     preconditions: uses get() to access subhalo catalog
@@ -231,6 +358,7 @@ def accreted_stellar_fraction(id, redshift = 2):
     ParticleIDs = stellar_data['ParticleIDs']
     
     #In-situ vs Ex-situ selection for galaxy
+    #select all the stars in a chosen galaxy
     star_file_indices = np.where(np.in1d(stars_ParticleID, ParticleIDs))[0]
     galaxy_stars_flag = stars_InSitu[star_file_indices]
     
@@ -239,8 +367,75 @@ def accreted_stellar_fraction(id, redshift = 2):
     
     #print('id='+str(id)+' | accreted fraction='+str(accreted_fraction))
     return accreted_fraction
-        
+'''
+
+
+def accreted_stellar_fraction(id, redshift = 2):
+    """
+    input params: id==int(must exist in range, pre-check); redshift=redshift (num val)
+    preconditions: uses get() to access subhalo catalog
+                   stars_033.hdf5 for z=2 neccessary
+                   hard coded for z=2, not for other redshifts
+    """
     
+    #open In-stu vs Ex-situ data file for z=2
+    import h5py
+    with h5py.File('stars_033.hdf5', 'r') as f:
+        #print(f.keys())
+        stars_ParticleID = f['ParticleID'][:]
+        stars_InSitu = f['InSitu'][:]
+
+    #open galaxy particle data file
+    stellar_data = get_galaxy_particle_data(id=id, redshift=redshift, populate_dict=True)
+    #access particle IDs
+    ParticleIDs = stellar_data['ParticleIDs']
+    stellar_masses = stellar_data['stellar_masses']
+
+    #In-situ vs Ex-situ selection for galaxy
+    #select all the stars in a chosen galaxy from accretion data files
+    star_file_indices = np.where(np.in1d(stars_ParticleID, ParticleIDs))[0]
+    galaxy_stars_flag = stars_InSitu[star_file_indices]
+
+    #find accreted fraction
+    accreted_fraction = np.sum(stellar_masses[galaxy_stars_flag==0])/np.sum(stellar_masses)
+    #print('id='+str(id)+' | accreted fraction='+str(accreted_fraction))
+    return accreted_fraction
+
+
+
+def median_age_accreted_stellar_fraction(id, redshift = 2):
+    """
+    input params: id==int(must exist in range, pre-check); redshift=redshift (num val)
+    preconditions: uses get() to access subhalo catalog
+                   stars_033.hdf5 for z=2 neccessary
+                   hard coded for z=2, not for other redshifts
+    """
+    
+    #open In-stu vs Ex-situ data file for z=2
+    import h5py
+    with h5py.File('stars_033.hdf5', 'r') as f:
+        #print(f.keys())
+        stars_ParticleID = f['ParticleID'][:]
+        stars_InSitu = f['InSitu'][:]
+
+    #open galaxy particle data file
+    stellar_data = get_galaxy_particle_data(id=id, redshift=redshift, populate_dict=True)
+    #access particle IDs
+    ParticleIDs = stellar_data['ParticleIDs']
+    LookbackTime = stellar_data['LookbackTime']
+
+    #In-situ vs Ex-situ selection for galaxy
+    #select all the stars in a chosen galaxy from accretion data files
+    star_file_indices = np.where(np.in1d(stars_ParticleID, ParticleIDs))[0]
+    galaxy_stars_flag = stars_InSitu[star_file_indices]
+
+    #find accreted fraction median age
+    median_age_accreted_fraction = np.median(LookbackTime[galaxy_stars_flag==0])
+    #print('id='+str(id)+' | accreted fraction='+str(accreted_fraction))
+    return median_age_accreted_fraction
+
+
+
     
 def age_gradient(id, redshift):
     """
@@ -265,11 +460,73 @@ def age_gradient(id, redshift):
     R_e = np.nanmedian(R)
     statistic, bin_edges, bin_number = scipy.stats.binned_statistic(R, LookbackTime, 'median', bins=radial_percentiles)
     
-    #calculate age gradient:: Units: Gyr
-    #avg(75~90th percentile) - avg(10~25th percentile)
-    age_grad = np.average(statistic[75:90]) - np.average(statistic[10:25])
+    #calculate age difference:: Units: Gyr
+    #avg(75~90th percentile binned age) - avg(10~25th percentile binned age)
+    age_difference = np.average(statistic[75:90]) - np.average(statistic[10:25])
     
-    return age_grad
+    #calculate radial scale difference:: Units: kpc
+    #avg(75~90th percentile radial distance) - avg(10~25th percentile radial distance)
+    radial_difference = np.average(radial_percentiles[75:90]) - np.average(radial_percentiles[10:25])
+    
+    return age_difference, radial_difference
+
+
+
+def age_gradient_Re(id, redshift, scale=30):
+    """
+    input params: id==int(must exist in range, pre-check); redshift=redshift (num val); scale=*kpc out to which to consider star particles
+    preconditions: uses get() to access subhalo catalog
+    output: saves the merger tree for the subhalo
+    """
+    import scipy
+    stellar_data = get_galaxy_particle_data(id=id, redshift=redshift, populate_dict=True)
+    
+    #getting data from arrays
+    dx = stellar_data['relative_x_coordinates']
+    dy = stellar_data['relative_y_coordinates']
+    dz = stellar_data['relative_z_coordinates']
+    R = (dx**2 + dy**2 + dz**2)**(1/2)
+    LookbackTime = stellar_data['LookbackTime'][R<=scale]
+    R = R[R<=scale]
+
+    radial_percentile_10 = np.percentile(R, 10) 
+    radial_percentile_25 = np.percentile(R, 25) 
+    radial_percentile_75 = np.percentile(R, 75) 
+    radial_percentile_90 = np.percentile(R, 90) 
+
+    #calculate age difference:: Units: Gyr
+    #avg(75~90th percentile binned age) - avg(10~25th percentile binned age)
+    age_difference = np.average(LookbackTime[(R >= radial_percentile_75) & (R <= radial_percentile_90)]) - np.average(LookbackTime[(R >= radial_percentile_10) & (R <= radial_percentile_25)])
+    
+    #calculate radial scale difference:: Units: kpc
+    #avg(75~90th percentile radial distance) - avg(10~25th percentile radial distance)
+    radial_difference = np.average(R[(R >= radial_percentile_75) & (R <= radial_percentile_90)]) - np.average(R[(R >= radial_percentile_10) & (R <= radial_percentile_25)])
+    
+    return age_difference, radial_difference
+
+
+
+def median_age_half_Re(id, redshift = 2):
+    """
+    input params: id==int(must exist in range, pre-check); redshift=redshift (num val)
+    preconditions: uses get() to access subhalo catalog
+                   stars_033.hdf5 for z=2 neccessary
+                   hard coded for z=2, not for other redshifts
+    """
+
+    #open galaxy particle data file
+    stellar_data = get_galaxy_particle_data(id=id, redshift=redshift, populate_dict=True)
+    LookbackTime = stellar_data['LookbackTime']
+    dx = stellar_data['relative_x_coordinates']
+    dy = stellar_data['relative_y_coordinates']
+    dz = stellar_data['relative_z_coordinates']
+    R = (dx**2 + dy**2 + dz**2)**(1/2)
+    
+    R_e = np.nanmedian(R)
+    median_age_half_Re = np.median(LookbackTime[R <= 0.25*R_e])
+
+    return median_age_half_Re
+
 
     
 
@@ -299,21 +556,21 @@ def get_star_formation_history(id, redshift, plot=False, binwidth=0.05):
     """
     input params: id==int(must exist in range, pre-check); redshift==numerical-val; plot=="True" or "False"
     preconditions: depends on get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True) output
-    output: (plot=False): (SFH, BE): SFH=StellarFormationHistory, units: $M_\odot$/yr;  BE=BinEdges, units: Gyr
+    output: (plot=False): (SFH, BE): SFH=StellarFormationHistory, units: $M_\odot$;  BE=BinEdges, units: Gyr
     output: (plot=True): plt.hist (SFH, BE)
     """
     stellar_data = get_galaxy_particle_data(id=id , redshift=redshift, populate_dict=True)
     HistWeights = stellar_data['stellar_initial_masses']
     #HistWeights = stellar_data['stellar_initial_masses']/(binwidth*1e9) #units: logMsol/yr
     LookbackTime = stellar_data['LookbackTime']
-    SFH, BE = np.histogram(LookbackTime, bins=np.arange(0, max(LookbackTime), binwidth), weights=HistWeights, density = True)
+    SFH, BE = np.histogram(LookbackTime, bins=np.arange(0, 3.2, binwidth), weights=HistWeights, density = True)
     #SFH, BE = np.histogram(LookbackTime, bins=np.arange(0, max(LookbackTime), binwidth), weights=HistWeights)
-    bincenters = [(BE[i]+BE[i+1])/2. for i in range(len(BE)-1)]
+    bincenters = np.asarray([(BE[i]+BE[i+1])/2. for i in range(len(BE)-1)])
     if plot==False:
         return bincenters, SFH
     else:     
         plt.figure(figsize=(10,7))
-        plt.step(bincenters, SFH, color = 'b')
+        plt.step(bincenters, SFH/np.sum(SFH), color = 'b')
         plt.title('Histogram for Lookback Times for id = ' + str(id))
         plt.xlim(0, )
         plt.ylim(0, )
@@ -425,9 +682,9 @@ def halfmass_rad_stars(id, redshift):
 
 
 
-def halflight_rad_stars(id, redshift, band):
+def halflight_rad_stars(id, redshift, band, bound=0.5):
     """
-    input params: redshift=redshift(num val); id==int(must exist in range, pre-check); band==['U'(Vega magnitude), 
+    input params: redshift=redshift(num val); id==int(must exist in range, pre-check); band==['U'(Vega magnitude), bound==(0, 1)
                                                                                               'V'(Vega magnitude), 
                                                                                               'I'(AB magnitude),
                                                                                               'M'(solM) == (test)]
@@ -450,7 +707,7 @@ def halflight_rad_stars(id, redshift, band):
         tuples = zip(*sorted_pairs)
         R_sort, band_sort = [list(tuple) for tuple in  tuples]
 
-        band_indices = np.where(np.cumsum(np.array(band_sort))>=0.5*np.sum(np.array(band_sort)))
+        band_indices = np.where(np.cumsum(np.array(band_sort))>=bound*np.sum(np.array(band_sort)))
         halflight_rad = max(np.array(R_sort)[i] for i in band_indices)
     
     elif band=='V':
@@ -462,7 +719,7 @@ def halflight_rad_stars(id, redshift, band):
         tuples = zip(*sorted_pairs)
         R_sort, band_sort = [list(tuple) for tuple in  tuples]
 
-        band_indices = np.where(np.cumsum(np.array(band_sort))>=0.5*np.sum(np.array(band_sort)))
+        band_indices = np.where(np.cumsum(np.array(band_sort))>=bound*np.sum(np.array(band_sort)))
         halflight_rad = max(np.array(R_sort)[i] for i in band_indices)
     
     elif band=='I':
@@ -474,18 +731,18 @@ def halflight_rad_stars(id, redshift, band):
         tuples = zip(*sorted_pairs)
         R_sort, band_sort = [list(tuple) for tuple in  tuples]
 
-        band_indices = np.where(np.cumsum(np.array(band_sort))>=0.5*np.sum(np.array(band_sort)))
+        band_indices = np.where(np.cumsum(np.array(band_sort))>=bound*np.sum(np.array(band_sort)))
         halflight_rad = max(np.array(R_sort)[i] for i in band_indices)
     
     elif band=='M':
-        mass = stellar_data['stellar_initial_masses']
+        mass = stellar_data['stellar_masses']
         zipped_lists = zip(R, mass)
         sorted_pairs = sorted(zipped_lists)
 
         tuples = zip(*sorted_pairs)
         R_sort, band_sort = [list(tuple) for tuple in  tuples]
 
-        band_indices = np.where(np.cumsum(np.array(band_sort))>=0.5*np.sum(np.array(band_sort)))
+        band_indices = np.where(np.cumsum(np.array(band_sort))>=bound*np.sum(np.array(band_sort)))
         halflight_rad = max(np.array(R_sort)[i] for i in band_indices)
 
     return min(halflight_rad)
@@ -681,3 +938,123 @@ def particle_age_profile(id, redshift, n_bins=70, binwidth = 0.10):
 
     #plt.tight_layout()
     return plt.show()    
+
+
+def max_merger_mass_ratio(id, redshift = 2):
+    """
+    input params: id==int(must exist in range, pre-check); redshift=redshift (num val)
+    preconditions: uses get() to access subhalo catalog
+                   stars_033.hdf5 for z=2 neccessary
+                   hard coded for z=2, not for other redshifts
+    """
+    
+    #open In-stu vs Ex-situ data file for z=2
+    import h5py
+    with h5py.File('stars_033.hdf5', 'r') as f:
+        #print(f.keys())
+        MergerMassRatio = f['MergerMassRatio'][:]
+        SubfindID = f['SubfindID'][:]
+        
+    return max(MergerMassRatio[SubfindID==id])
+
+
+def maximum_mass_jump_ratio(id, snap, earliest_snap=6, mass_parameter='stars'):
+    '''
+    earliest_snap sets the earliest snapshot to be looked at
+    mass_parameter can take values: 'stars', 'dm', 'gas', 'bhs'
+    '''
+    url = "http://www.tng-project.org/api/TNG100-1/snapshots/" + str(snap) + "/subhalos/" + str(id)
+    sub = get(url) # get json response of subhalo properties
+
+    # prepare dict to hold result arrays
+    
+    fields = ['snap','id', 'mass_'+mass_parameter]
+    r = {}
+    for field in fields:
+        r[field] = []
+
+    while sub['prog_snap'] >= earliest_snap: #earliest snapshot to be considered
+        for field in fields:
+            r[field].append(sub[field])
+        # request the full subhalo details of the descendant by following the sublink URL
+        sub = get(sub['related']['sublink_progenitor'])
+
+    mass_diff = np.diff( np.array(r['mass_'+mass_parameter])[::-1] ) #To go from lower to higher t
+    max_mass_index = np.where(np.in1d(mass_diff, max(mass_diff)))[0]
+    max_mass_ratio = max(mass_diff) / np.array(r['mass_'+mass_parameter])[::-1][max_mass_index]
+    max_mass_ratio_snap = np.array(r['snap'])[::-1][np.where(np.in1d(mass_diff, max(mass_diff)))[0]]
+    if max_mass_ratio > 1:
+        max_mass_ratio = 1 / max_mass_ratio
+
+    return max_mass_ratio[0], max_mass_ratio_snap[0]
+
+
+
+def max_merger_ratio(id, redshift, scale=30):
+
+    stellar_data = get_galaxy_particle_data(id=id, redshift=redshift, populate_dict=True)
+    dx = stellar_data['relative_x_coordinates']
+    dy = stellar_data['relative_y_coordinates']
+    dz = stellar_data['relative_z_coordinates']
+    R = (dx**2 + dy**2 + dz**2)**(1/2)    
+    MergerMassRatio = stellar_data['MergerMassRatio'][R<=scale]
+    stellar_masses = stellar_data['stellar_masses'][R<=scale]
+    R = R[R<=scale]
+    
+    unique_MMR = np.asarray(list(set(MergerMassRatio)))
+    MMR = unique_MMR[unique_MMR>0]
+
+    TM = np.zeros(0)
+    for x in MMR:
+        TM = np.concatenate((TM, np.sum(stellar_masses[MergerMassRatio==x])), axis = None)
+    
+    return max(TM)/np.sum(stellar_masses)
+
+def max_merger_time(id, redshift, scale=30):
+
+    stellar_data = get_galaxy_particle_data(id=id, redshift=redshift, populate_dict=True)
+    dx = stellar_data['relative_x_coordinates']
+    dy = stellar_data['relative_y_coordinates']
+    dz = stellar_data['relative_z_coordinates']
+    R = (dx**2 + dy**2 + dz**2)**(1/2)
+    MergerMassRatio = stellar_data['MergerMassRatio'][R<=scale]
+    LookbackTime = stellar_data['LookbackTime'][R<=scale]
+    stellar_masses = stellar_data['stellar_masses'][R<=scale]
+    R = R[R<=scale]
+    
+    unique_MMR = np.asarray(list(set(MergerMassRatio)))
+    MMR = unique_MMR[unique_MMR>0]
+
+    TM = np.zeros(0)
+    for x in MMR:
+        TM = np.concatenate((TM, np.sum(stellar_masses[MergerMassRatio==x])), axis = None)
+    
+    return min(LookbackTime[MergerMassRatio==MMR[TM==max(TM)]])
+
+def mass_since_max_merger_time(id, redshift, scale=30):
+
+    stellar_data = get_galaxy_particle_data(id=id, redshift=redshift, populate_dict=True)
+    dx = stellar_data['relative_x_coordinates']
+    dy = stellar_data['relative_y_coordinates']
+    dz = stellar_data['relative_z_coordinates']
+    R = (dx**2 + dy**2 + dz**2)**(1/2)
+    MergerMassRatio = stellar_data['MergerMassRatio'][R<=scale]
+    LookbackTime = stellar_data['LookbackTime'][R<=scale]
+    stellar_masses = stellar_data['stellar_masses'][R<=scale]
+    R = R[R<=scale]
+    
+    unique_MMR = np.asarray(list(set(MergerMassRatio)))
+    MMR = unique_MMR[unique_MMR>0]
+
+    TM = np.zeros(0)
+    for x in MMR:
+        TM = np.concatenate((TM, np.sum(stellar_masses[MergerMassRatio==x])), axis = None)
+    
+    MMT = min(LookbackTime[MergerMassRatio==MMR[TM==max(TM)]])
+    
+    return np.sum(stellar_masses[LookbackTime<MMT])
+
+def max_SFR_time(id, redshift, binwidth=0.1):
+    SFH = get_star_formation_history(id=id, redshift=redshift, plot=False, binwidth=binwidth)[1]
+    BC = get_star_formation_history(id=id, redshift=redshift, plot=False, binwidth=binwidth)[0]
+    return BC[SFH == max(SFH)]

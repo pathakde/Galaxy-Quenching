@@ -7,7 +7,7 @@ import requests
 #import get()
 from simulation_data import get
 
-from .galaxy import mean_stellar_age, timeaverage_stellar_formation_rate, median_stellar_age, mean_stellar_metallicity, age_profile, mean_stellar_mass, total_stellar_mass, halfmass_rad_stars, halflight_rad_stars, accreted_stellar_fraction, age_gradient, current_star_formation_rate
+from .galaxy import mean_stellar_age, timeaverage_stellar_formation_rate, median_stellar_age, mean_stellar_metallicity, age_profile, mean_stellar_mass, total_stellar_mass, halfmass_rad_stars, halflight_rad_stars, accreted_stellar_fraction, age_gradient, age_gradient_Re, current_star_formation_rate, maximum_mass_jump_ratio, max_merger_mass_ratio, median_age_accreted_stellar_fraction, median_age_half_Re
 
 class GalaxyPopulation():
     
@@ -17,6 +17,7 @@ class GalaxyPopulation():
         self.mass_min = 0
         self.mass_max = 0
         self.redshift = 0
+        self.snap = 0
         
         
     #select ids
@@ -65,10 +66,27 @@ class GalaxyPopulation():
                 d15 = f.create_dataset('halflight_radius_V', data = self.get_halflight_rad_stars(band='V'))
                 d16 = f.create_dataset('halflight_radius_I', data = self.get_halflight_rad_stars(band='I'))
                 d17 = f.create_dataset('halfmass_radius_calculated', data = self.get_halflight_rad_stars(band='M'))
-                d18 = f.create_dataset('current_sSFR', data = my_galaxy_population.get_current_stellar_formation_rate()/10**(my_galaxy_population.get_total_stellar_mass()))
-                d19 = f.create_dataset('newbin_current_SFR', data = my_galaxy_population.get_timeaverage_stellar_formation_rate(timescale=0, binwidth=0.01))
-                d20 = f.create_dataset('age_gradient', data = my_galaxy_population.get_age_gradient())
-                d21 = f.create_dataset('accreted_stellar_fraction', data = my_galaxy_population.get_accreted_stellar_fraction())
+                d18 = f.create_dataset('current_sSFR', data = self.get_current_stellar_formation_rate()/10**(self.get_total_stellar_mass()))
+                d19 = f.create_dataset('newbin_current_SFR', data = self.get_timeaverage_stellar_formation_rate(timescale=0, binwidth=0.01))
+                d20 = f.create_dataset('age_difference', data = self.get_age_difference())
+                d21 = f.create_dataset('accreted_stellar_fraction', data = self.get_accreted_stellar_fraction())
+                d22 = f.create_dataset('radial_difference', data = self.get_radial_difference())
+                d23 = f.create_dataset('age_gradient', data = self.get_age_difference()/self.get_radial_difference())
+                d24 = f.create_dataset('median_age_accreted_stellar_fraction', data = self.get_median_age_accreted_stellar_fraction())
+                d25 = f.create_dataset('accreted_stellar_mass_fraction', data = self.get_accreted_stellar_fraction())
+                d26 = f.create_dataset('age_gradient_3Re', data = self.get_age_gradient_Re(scale=3))
+                d27 = f.create_dataset('median_age_half_Re', data = self.get_median_age_half_Re())
+                d28 = f.create_dataset('light_percentile85_U', data = self.get_halflight_rad_stars(band='U', bound=0.85))
+                d29 = f.create_dataset('light_percentile85_V', data = self.get_halflight_rad_stars(band='V', bound=0.85))
+                d30 = f.create_dataset('light_percentile85_I', data = self.get_halflight_rad_stars(band='I', bound=0.85))
+                d31 = f.create_dataset('mass_percentile85', data = my_galaxy_population.get_halflight_rad_stars(band='M', bound=0.85))
+                d32 = f.create_dataset('light_percentile95_U', data = my_galaxy_population.get_halflight_rad_stars(band='U', bound=0.95))
+                d33 = f.create_dataset('light_percentile95_V', data = my_galaxy_population.get_halflight_rad_stars(band='V', bound=0.95))
+                d34 = f.create_dataset('light_percentile95_I', data = my_galaxy_population.get_halflight_rad_stars(band='I', bound=0.95))
+                d35 = f.create_dataset('mass_percentile95', data = my_galaxy_population.get_halflight_rad_stars(band='M', bound=0.95))
+
+
+
                 
         with h5py.File('galaxy_population_data_'+str(self.redshift)+'.hdf5', 'r') as f:
             ids = f['ids'][:]
@@ -90,6 +108,8 @@ class GalaxyPopulation():
             halfmass_radius_calculated = f['halfmass_radius_calculated'][:]
             current_sSFR = f['current_sSFR'][:]
             newbin_current_SFR = f['newbin_current_SFR'][:]
+            age_difference = f['age_difference'][:]
+            radial_difference = f['radial_difference'][:]
             age_gradient = f['age_gradient'][:]
             accreted_stellar_fraction = f['accreted_stellar_fraction'][:]
         galaxy_population_data = {
@@ -112,6 +132,8 @@ class GalaxyPopulation():
                                     'halfmass_radius_calculated': halfmass_radius_calculated,
                                     'current_sSFR': current_sSFR,
                                     'newbin_current_SFR': newbin_current_SFR,
+                                    'age_difference': age_difference,
+                                    'radial_difference': radial_difference,
                                     'age_gradient': age_gradient,
                                     'accreted_stellar_fraction': accreted_stellar_fraction
                                  }
@@ -225,19 +247,46 @@ class GalaxyPopulation():
         for i, id in enumerate(ids):
             MedianSFT[i] = median_stellar_age(redshift = self.redshift, id = id)
         #save file
-        np.savetxt('z='+ str(self.redshift) +'_Mean_SFT', MedianSFT)
-        median_SFT = np.loadtxt('z='+ str(self.redshift) +'_Mean_SFT', dtype=float)
+        np.savetxt('z='+ str(self.redshift) +'_Median_SFT', MedianSFT)
+        median_SFT = np.loadtxt('z='+ str(self.redshift) +'_Median_SFT', dtype=float)
         return median_SFT
     
     
     def get_median_stellar_age(self):
         import pathlib
-        file = pathlib.Path('z='+ str(self.redshift) +'_Mean_SFT')
+        file = pathlib.Path('z='+ str(self.redshift) +'_Median_SFT')
         if file.exists ():
-            median_SFT = np.loadtxt('z='+ str(self.redshift) +'_Mean_SFT', dtype=float) #rename pre-existing files before parameterizing further
+            median_SFT = np.loadtxt('z='+ str(self.redshift) +'_Median_SFT', dtype=float) #rename pre-existing files before parameterizing further
             return median_SFT
         else:
             return self.calc_median_stellar_age()
+    
+    
+    
+    #median central 1/2 Re SFT
+    def calc_median_age_half_Re(self):
+        #create and populate array for mean SFT
+        ids = self.ids
+        MedianSFT = np.zeros(len(ids))
+        for i, id in enumerate(ids):
+            MedianSFT[i] = median_age_half_Re(redshift = self.redshift, id = id)
+        #save file
+        np.savetxt('z='+ str(self.redshift) +'_median_age_half_Re', MedianSFT)
+        median_SFT = np.loadtxt('z='+ str(self.redshift) +'_median_age_half_Re', dtype=float)
+        return median_SFT
+    
+    
+    
+    def get_median_age_half_Re(self):
+        import pathlib
+        file = pathlib.Path('z='+ str(self.redshift) +'_median_age_half_Re')
+        if file.exists ():
+            median_SFT = np.loadtxt('z='+ str(self.redshift) +'_median_age_half_Re', dtype=float) #rename pre-existing files before parameterizing further
+            return median_SFT
+        else:
+            return self.calc_median_age_half_Re()
+    
+    
     
     
     #effective radius
@@ -356,26 +405,26 @@ class GalaxyPopulation():
         
 
          #halflight_rad_stars
-    def calc_halflight_rad_stars(self, calc_band):
+    def calc_halflight_rad_stars(self, calc_band, calc_bound):
         ids = self.ids
         halflight_rad = np.zeros(len(ids))
         for i, id in enumerate(ids):
-            halflight_rad[i] = halflight_rad_stars(id=id, redshift=self.redshift, band=calc_band)
+            halflight_rad[i] = halflight_rad_stars(id=id, redshift=self.redshift, band=calc_band, bound=calc_bound)
         #save file
-        np.savetxt('z='+ str(self.redshift) +str(calc_band)+'_halflight_rad', halflight_rad)
-        halflight_rad = np.loadtxt('z='+ str(self.redshift) +str(calc_band)+'_halflight_rad', dtype=float)
+        np.savetxt('z='+ str(self.redshift) +str(calc_band)+'_halflight_rad'+str(calc_bound), halflight_rad)
+        halflight_rad = np.loadtxt('z='+ str(self.redshift) +str(calc_band)+'_halflight_rad'+str(calc_bound), dtype=float)
         return halflight_rad
     
     
     
-    def get_halflight_rad_stars(self, band):
+    def get_halflight_rad_stars(self, band, bound):
         import pathlib
-        file = pathlib.Path('z='+ str(self.redshift) +str(band)+'_halflight_rad')
+        file = pathlib.Path('z='+ str(self.redshift) +str(band)+'_halflight_rad'+str(bound))
         if file.exists ():
-            halflight_rad = np.loadtxt('z='+ str(self.redshift) +str(band)+'_halflight_rad', dtype=float) #rename pre-existing files before parameterizing further
+            halflight_rad = np.loadtxt('z='+ str(self.redshift) +str(band)+'_halflight_rad'+str(bound), dtype=float) #rename pre-existing files before parameterizing further
             return halflight_rad
         else:
-            return self.calc_halflight_rad_stars(calc_band = band)
+            return self.calc_halflight_rad_stars(calc_band = band, calc_bound = bound)
         
         
 
@@ -402,23 +451,161 @@ class GalaxyPopulation():
         
         
         
-    #age gradient: in Gyr 
-    def calc_age_gradient(self):
+    #median age of accreted stellar fractions    
+    def calc_median_age_accreted_stellar_fraction(self):
+        ids = self.ids
+        accreted_frac = np.zeros(len(ids))
+        for i, id in enumerate(ids): 
+            accreted_frac[i] = median_age_accreted_stellar_fraction(redshift = self.redshift, id = id)
+        #save file
+        np.savetxt('z='+str(self.redshift)+'_median_age_accreted_stellar_fraction', accreted_frac)
+        accreted_fraction = np.loadtxt('z='+str(self.redshift)+'_median_age_accreted_stellar_fraction', dtype=float)
+        return accreted_fraction
+    
+    
+    def get_median_age_accreted_stellar_fraction(self): 
+        import pathlib
+        file = pathlib.Path('z='+str(self.redshift)+'_median_age_accreted_stellar_fraction')
+        if file.exists ():
+            accreted_fraction = np.loadtxt('z='+str(self.redshift)+'_median_age_accreted_stellar_fraction', dtype=float) #rename pre-existing files before parameterizing further
+            return accreted_fraction
+        else:
+            return self.calc_median_age_accreted_stellar_fraction()
+        
+        
+        
+    #age difference: in Gyr 
+    def calc_age_difference(self):
         ids = self.ids
         age_grad = np.zeros(len(ids))
         for i, id in enumerate(ids): 
-            age_grad[i] = age_gradient(redshift = self.redshift, id = id)
+            age_grad[i] = age_gradient(redshift = self.redshift, id = id)[0]
         #save file
-        np.savetxt('z='+str(self.redshift)+'_age_gradient', age_grad)
-        age_grad = np.loadtxt('z='+str(self.redshift)+'_age_gradient', dtype=float)
+        np.savetxt('z='+str(self.redshift)+'_age_difference', age_grad)
+        age_grad = np.loadtxt('z='+str(self.redshift)+'_age_difference', dtype=float)
         return age_grad
     
     
-    def get_age_gradient(self): 
+    def get_age_difference(self): 
         import pathlib
-        file = pathlib.Path('z='+str(self.redshift)+'_age_gradient')
+        file = pathlib.Path('z='+str(self.redshift)+'_age_difference')
         if file.exists ():
-            age_grad = np.loadtxt('z='+str(self.redshift)+'_age_gradient', dtype=float) #rename pre-existing files before parameterizing further
+            age_grad = np.loadtxt('z='+str(self.redshift)+'_age_difference', dtype=float) #rename pre-existing files before parameterizing further
             return age_grad
         else:
-            return self.calc_age_gradient()
+            return self.calc_age_difference()
+        
+        
+        
+    #radial profile difference: in kpc
+    def calc_radial_difference(self):
+        ids = self.ids
+        age_grad = np.zeros(len(ids))
+        for i, id in enumerate(ids): 
+            age_grad[i] = age_gradient(redshift = self.redshift, id = id)[1]
+        #save file
+        np.savetxt('z='+str(self.redshift)+'_radial_difference', age_grad)
+        age_grad = np.loadtxt('z='+str(self.redshift)+'_radial_difference', dtype=float)
+        return age_grad
+    
+    
+    def get_radial_difference(self): 
+        import pathlib
+        file = pathlib.Path('z='+str(self.redshift)+'_radial_difference')
+        if file.exists ():
+            age_grad = np.loadtxt('z='+str(self.redshift)+'_radial_difference', dtype=float) #rename pre-existing files before parameterizing further
+            return age_grad
+        else:
+            return self.calc_radial_difference()
+        
+
+       
+    #radial profile difference: in Gyr 
+    def calc_age_gradient_Re(self, calc_scale=3):
+        ids = self.ids
+        age_grad = np.zeros(len(ids))
+        for i, id in enumerate(ids): 
+            age_grad[i] = age_gradient_Re(redshift = self.redshift, id = id, scale = calc_scale)[0] / age_gradient_Re(redshift = self.redshift, id = id, scale = calc_scale)[1]
+        #save file
+        np.savetxt('z='+str(self.redshift)+'_age_gradient_Re'+str(calc_scale), age_grad)
+        age_grad = np.loadtxt('z='+str(self.redshift)+'_age_gradient_Re'+str(calc_scale), dtype=float)
+        return age_grad
+    
+    
+    def get_age_gradient_Re(self, scale=3): 
+        import pathlib
+        file = pathlib.Path('z='+str(self.redshift)+'_age_gradient_Re'+str(scale))
+        if file.exists ():
+            age_grad = np.loadtxt('z='+str(self.redshift)+'_age_gradient_Re'+str(scale), dtype=float) #rename pre-existing files before parameterizing further
+            return age_grad
+        else:
+            return self.calc_age_gradient_Re(calc_scale = scale)
+        
+        
+        
+        #max_mass_ratio & snapshot # 
+    def calc_maximum_mass_ratio(self, calc_snap, calc_earliest_snap, calc_mass_parameter):
+        ids = self.ids
+        mass_ratio = np.zeros(len(ids))
+        for i, id in enumerate(ids): 
+            mass_ratio[i] = maximum_mass_jump_ratio(id, snap=calc_snap, earliest_snap=calc_earliest_snap, mass_parameter=calc_mass_parameter)[0]
+        #save file
+        np.savetxt('z='+str(self.redshift)+'_maximum_mass_ratio'+calc_mass_parameter, mass_ratio)
+        mass_ratio = np.loadtxt('z='+str(self.redshift)+'_maximum_mass_ratio'+calc_mass_parameter, dtype=float)
+        return mass_ratio
+    
+    
+    def get_maximum_mass_ratio(self, snap, earliest_snap=6, mass_parameter='stars'): 
+        import pathlib
+        file = pathlib.Path('z='+str(self.redshift)+'_maximum_mass_ratio'+mass_parameter)
+        if file.exists ():
+            mass_ratio = np.loadtxt('z='+str(self.redshift)+'_maximum_mass_ratio'+mass_parameter, dtype=float) #rename pre-existing files before parameterizing further
+            return mass_ratio
+        else:
+            return self.calc_maximum_mass_ratio(calc_snap=snap, calc_earliest_snap=earliest_snap, calc_mass_parameter=mass_parameter)
+        
+        
+        
+    def calc_maximum_mass_ratio_snap(self, calc_snap, calc_earliest_snap, calc_mass_parameter):
+        ids = self.ids
+        mass_ratio_snap = np.zeros(len(ids))
+        for i, id in enumerate(ids): 
+            mass_ratio_snap[i] = maximum_mass_jump_ratio(id, snap=calc_snap, earliest_snap=calc_earliest_snap, mass_parameter=calc_mass_parameter)[1]
+        #save file
+        np.savetxt('z='+str(self.redshift)+'_maximum_mass_ratio_snap'+calc_mass_parameter, mass_ratio_snap)
+        mass_ratio_snap = np.loadtxt('z='+str(self.redshift)+'_maximum_mass_ratio_snap'+calc_mass_parameter, dtype=float)
+        return mass_ratio_snap
+    
+    
+    def get_maximum_mass_ratio_snap(self, snap, earliest_snap=6, mass_parameter='stars'): 
+        import pathlib
+        file = pathlib.Path('z='+str(self.redshift)+'_maximum_mass_ratio_snap'+mass_parameter)
+        if file.exists ():
+            mass_ratio_snap = np.loadtxt('z='+str(self.redshift)+'_maximum_mass_ratio_snap'+mass_parameter, dtype=float) #rename pre-existing files before parameterizing further
+            return mass_ratio_snap
+        else:
+            return self.calc_maximum_mass_ratio_snap(calc_snap=snap, calc_earliest_snap=earliest_snap, calc_mass_parameter=mass_parameter)
+        
+        
+        
+        #max_mass_ratio & snapshot # 
+    def calc_max_merger_mass_ratio(self):
+        ids = self.ids
+        mass_ratio = np.zeros(len(ids))
+        for i, id in enumerate(ids): 
+            mass_ratio[i] = max_merger_mass_ratio(id=id, redshift=self.redshift)
+        #save file
+        np.savetxt('z='+str(self.redshift)+'_max_merger_mass_ratio', mass_ratio)
+        mass_ratio = np.loadtxt('z='+str(self.redshift)+'_max_merger_mass_ratio', dtype=float)
+        return mass_ratio
+    
+    
+    def get_max_merger_mass_ratio(self): 
+        import pathlib
+        file = pathlib.Path('z='+str(self.redshift)+'_max_merger_mass_ratio')
+        if file.exists ():
+            mass_ratio = np.loadtxt('z='+str(self.redshift)+'_max_merger_mass_ratio', dtype=float) #rename pre-existing files before parameterizing further
+            return mass_ratio
+        else:
+            return self.calc_max_merger_mass_ratio()
+        
