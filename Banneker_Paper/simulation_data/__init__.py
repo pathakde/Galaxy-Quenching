@@ -1,10 +1,15 @@
 import requests
 
+#insert personal API key to download simulation data using get()
+API = "ThisIsMyAPIKeyForIllustrisTNG"
 #defined get()
-
 def get(path, params=None):
+    '''
+    The oroginal version of this function can be found at
+    https://www.tng-project.org/data/docs/api/
+    '''
     # make HTTP GET request to path
-    headers = {"api-key":"bc47cc6e1bd83ad2708bc714f126dc09"}
+    headers = {"api-key":API}
     r = requests.get(path, params=params, headers=headers)
 
     # raise exception if response code is not HTTP SUCCESS (200)
